@@ -6,6 +6,7 @@ import { mappingRouter } from '@/server/api/routers/mapping'
 import { transformationRouter } from '@/server/api/routers/transformation'
 import { validationRouter } from '@/server/api/routers/validation'
 import { analyticsRouter } from '@/server/api/routers/analytics'
+import { metaInsightsRouter } from '@/server/api/routers/meta-insights'
 
 /**
  * This is the primary router for your server.
@@ -19,6 +20,7 @@ export const appRouter = createTRPCRouter({
   transformation: transformationRouter,
   validation: validationRouter,
   analytics: analyticsRouter,
+  metaInsights: metaInsightsRouter,
 })
 
 // Export type definition of API

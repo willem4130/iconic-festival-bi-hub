@@ -3,7 +3,21 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Settings, LogOut, Menu, X } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Users,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Plug,
+  BarChart3,
+  Calendar,
+  GitCompare,
+  DollarSign,
+  Cloud,
+  ChevronDown,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -21,6 +35,7 @@ type NavItem = {
   title: string
   href: string
   icon: React.ComponentType<{ className?: string }>
+  children?: { title: string; href: string; icon: React.ComponentType<{ className?: string }> }[]
 }
 
 const navItems: NavItem[] = [
@@ -30,9 +45,26 @@ const navItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
+    title: 'Insights',
+    href: '/admin/insights',
+    icon: BarChart3,
+    children: [
+      { title: 'Overview', href: '/admin/insights', icon: BarChart3 },
+      { title: 'Calendar', href: '/admin/insights/calendar', icon: Calendar },
+      { title: 'Comparison', href: '/admin/insights/comparison', icon: GitCompare },
+      { title: 'Ad Performance', href: '/admin/insights/ads', icon: DollarSign },
+      { title: 'Weather', href: '/admin/insights/weather', icon: Cloud },
+    ],
+  },
+  {
     title: 'Users',
     href: '/admin/users',
     icon: Users,
+  },
+  {
+    title: 'Connections',
+    href: '/admin/settings/connections',
+    icon: Plug,
   },
   {
     title: 'Settings',
@@ -44,6 +76,13 @@ const navItems: NavItem[] = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Insights'])
+
+  const toggleExpand = (title: string) => {
+    setExpandedItems((prev) =>
+      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]
+    )
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -87,7 +126,61 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <nav className="flex-1 space-y-1 px-3 py-4">
             {navItems.map((item) => {
               const Icon = item.icon
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+              const isExpanded = expandedItems.includes(item.title)
+              const hasChildren = item.children && item.children.length > 0
+
+              if (hasChildren) {
+                return (
+                  <div key={item.href}>
+                    <button
+                      onClick={() => toggleExpand(item.title)}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                      )}
+                    >
+                      <span className="flex items-center gap-3">
+                        <Icon className="h-5 w-5" />
+                        {item.title}
+                      </span>
+                      <ChevronDown
+                        className={cn(
+                          'h-4 w-4 transition-transform',
+                          isExpanded ? 'rotate-180' : ''
+                        )}
+                      />
+                    </button>
+                    {isExpanded && item.children && (
+                      <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 pl-3 dark:border-gray-700">
+                        {item.children.map((child) => {
+                          const ChildIcon = child.icon
+                          const isChildActive = pathname === child.href
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              className={cn(
+                                'flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                                isChildActive
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                              )}
+                              onClick={() => setSidebarOpen(false)}
+                            >
+                              <ChildIcon className="h-4 w-4" />
+                              {child.title}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
               return (
                 <Link
                   key={item.href}

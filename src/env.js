@@ -27,6 +27,19 @@ export const env = createEnv({
     EMAIL_REPLY_TO: z.string().email().optional(), // Inbound email for replies
     // Slack (optional)
     SLACK_BOT_TOKEN: z.string().optional(),
+
+    // Meta (Facebook/Instagram) API
+    META_APP_ID: z.string().optional(),
+    META_APP_SECRET: z.string().optional(),
+    META_ACCESS_TOKEN: z.string().optional(),
+    META_PAGE_ID: z.string().optional(),
+    META_INSTAGRAM_ACCOUNT_ID: z.string().optional(),
+    META_AD_ACCOUNT_ID: z.string().optional(),
+
+    // External Data Sources
+    OPENWEATHERMAP_API_KEY: z.string().optional(),
+    WEATHER_LOCATION_LAT: z.string().optional(),
+    WEATHER_LOCATION_LON: z.string().optional(),
   },
 
   /**
@@ -61,6 +74,19 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     EMAIL_REPLY_TO: process.env.EMAIL_REPLY_TO,
     SLACK_BOT_TOKEN: process.env.SLACK_BOT_TOKEN,
+
+    // Meta API
+    META_APP_ID: process.env.META_APP_ID,
+    META_APP_SECRET: process.env.META_APP_SECRET,
+    META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN,
+    META_PAGE_ID: process.env.META_PAGE_ID,
+    META_INSTAGRAM_ACCOUNT_ID: process.env.META_INSTAGRAM_ACCOUNT_ID,
+    META_AD_ACCOUNT_ID: process.env.META_AD_ACCOUNT_ID,
+
+    // External Data Sources
+    OPENWEATHERMAP_API_KEY: process.env.OPENWEATHERMAP_API_KEY,
+    WEATHER_LOCATION_LAT: process.env.WEATHER_LOCATION_LAT,
+    WEATHER_LOCATION_LON: process.env.WEATHER_LOCATION_LON,
     // NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
 

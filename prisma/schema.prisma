@@ -588,3 +588,740 @@ model CalculatedField {
   @@index([pipelineId])
   @@index([fieldName])
 }
+
+// ==========================================
+// META BI HUB - DIMENSION TABLES
+// ==========================================
+
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+}
+
+enum ContentType {
+  POST
+  STORY
+  REEL
+  LIVE
+  PHOTO
+  VIDEO
+  LINK
+  STATUS
+  CAROUSEL
+}
+
+enum AccountType {
+  PAGE           // Facebook Page
+  BUSINESS       // Instagram Business Account
+  CREATOR        // Instagram Creator Account
+}
+
+// dim_platform: Platform dimension (Facebook, Instagram)
+model DimPlatform {
+  id              String    @id @default(cuid())
+  platform        Platform  @unique
+  displayName     String    // "Facebook", "Instagram"
+  apiVersion      String    // Current API version (e.g., "v21.0")
+
+  // Relations
+  accounts        DimAccount[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// dim_account: Social media accounts (Pages, IG Business)
+model DimAccount {
+  id                    String      @id @default(cuid())
+  externalId            String      // Meta's ID for the account
+
+  // Platform reference
+  platformId            String
+  platform              DimPlatform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  // Account details
+  accountType           AccountType
+  name                  String      // Page/Account name
+  username              String?     // @handle
+  profilePictureUrl     String?
+
+  // For Instagram: linked Facebook Page
+  linkedFacebookPageId  String?
+
+  // Access token management
+  accessToken           String?     // Encrypted in production
+  tokenExpiresAt        DateTime?
+
+  // Sync status
+  lastSyncAt            DateTime?
+  isActive              Boolean     @default(true)
+
+  // Relations
+  content               DimContent[]
+  accountInsights       FactAccountInsightsDaily[]
+  audienceDemographics  FactAudienceDemographics[]
+  adCampaigns           DimAdCampaign[]
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@unique([platformId, externalId])
+  @@index([platformId])
+  @@index([accountType])
+  @@index([isActive])
+}
+
+// dim_content: Posts, Stories, Reels, etc.
+model DimContent {
+  id                String      @id @default(cuid())
+  externalId        String      // Meta's ID for the content
+
+  // Account reference
+  accountId         String
+  account           DimAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Content details
+  contentType       ContentType
+  message           String?     // Post text/caption
+  permalinkUrl      String?     // Link to the content
+
+  // Media details
+  mediaType         String?     // "IMAGE", "VIDEO", "CAROUSEL_ALBUM"
+  mediaUrl          String?
+  thumbnailUrl      String?
+  videoDuration     Int?        // Duration in seconds (for video/reels)
+
+  // Publishing info
+  publishedAt       DateTime
+  scheduledAt       DateTime?   // If was scheduled
+
+  // Content metadata
+  hashtags          String[]    // Extracted hashtags
+  mentions          String[]    // @mentions in content
+
+  // Relations
+  contentInsights   FactContentInsights[]
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([accountId, externalId])
+  @@index([accountId])
+  @@index([contentType])
+  @@index([publishedAt])
+}
+
+// dim_date: Date dimension for time-series analytics
+model DimDate {
+  id              String    @id @default(cuid())
+  date            DateTime  @unique @db.Date
+
+  // Date parts
+  year            Int
+  quarter         Int       // 1-4
+  month           Int       // 1-12
+  week            Int       // 1-53 (ISO week)
+  dayOfMonth      Int       // 1-31
+  dayOfWeek       Int       // 0=Sunday, 6=Saturday
+  dayOfYear       Int       // 1-366
+
+  // Display names
+  monthName       String    // "January"
+  dayName         String    // "Monday"
+
+  // Flags
+  isWeekend       Boolean
+  isHoliday       Boolean   @default(false)
+  holidayName     String?
+
+  // Festival-specific flags (for Iconic)
+  isFestivalDay   Boolean   @default(false)
+  festivalName    String?
+
+  // Relations
+  accountInsights         FactAccountInsightsDaily[]
+  adInsights              FactAdInsightsDaily[]
+  weatherData             FactWeatherDaily[]
+  events                  FactEventsCalendar[]
+  ticketSales             FactTicketSales[]
+  contentPerformance      AggContentPerformance[]
+
+  @@index([year, month])
+  @@index([isWeekend])
+  @@index([isFestivalDay])
+}
+
+// dim_time: Time dimension for optimal posting analysis
+model DimTime {
+  id              String    @id @default(cuid())
+  hour            Int       // 0-23
+  minute          Int       // 0-59 (typically 0, 15, 30, 45)
+
+  // Time parts
+  hourOfDay       Int       // 0-23
+  timeOfDay       String    // "Morning", "Afternoon", "Evening", "Night"
+
+  // Display
+  displayTime     String    // "09:00", "14:30"
+  displayTime12h  String    // "9:00 AM", "2:30 PM"
+
+  // Relations
+  optimalPostingTimes     AggOptimalPostingTimes[]
+
+  @@unique([hour, minute])
+}
+
+// ==========================================
+// META BI HUB - ORGANIC FACT TABLES
+// ==========================================
+
+// fact_account_insights_daily: Page/Account level metrics
+model FactAccountInsightsDaily {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  accountId       String
+  account         DimAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  dateId          String
+  date            DimDate     @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Page metrics (Facebook) - using new API names (Nov 2025)
+  pageViews       Int?        // Formerly page_impressions
+  pageFollows     Int?        // Formerly page_fans (total followers)
+  pageFollowsNew  Int?        // New followers that day
+  pageUnfollows   Int?        // Unfollows that day
+
+  // Engagement metrics
+  pageEngagement  Int?        // Total engagements
+  pageReactions   Int?        // Reactions (likes, love, etc.)
+  pageComments    Int?        // Comments
+  pageShares      Int?        // Shares
+  pageSaves       Int?        // Saves (Instagram)
+
+  // Reach metrics
+  pageReach       Int?        // Unique users reached
+  pageImpressions Int?        // Total impressions
+
+  // Video metrics
+  videoViews      Int?        // Total video views
+  videoViewTime   Int?        // Total watch time in seconds
+
+  // Story metrics (Instagram)
+  storiesCount    Int?        // Stories posted
+  storiesReach    Int?        // Story reach
+  storiesReplies  Int?        // Story replies
+
+  // Profile metrics
+  profileViews    Int?        // Profile visits
+  websiteClicks   Int?        // Website link clicks
+  emailClicks     Int?        // Email button clicks
+  phoneClicks     Int?        // Phone button clicks
+
+  // Calculated metrics
+  engagementRate  Float?      // (engagements / reach) * 100
+  followGrowthRate Float?     // ((new - unfollows) / total) * 100
+
+  createdAt       DateTime    @default(now())
+
+  @@unique([accountId, dateId])
+  @@index([accountId])
+  @@index([dateId])
+  @@index([pageReach])
+}
+
+// fact_content_insights: Post-level metrics
+model FactContentInsights {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  contentId       String
+  content         DimContent  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Snapshot timestamp (metrics can be updated over time)
+  snapshotAt      DateTime    @default(now())
+
+  // Engagement metrics
+  likes           Int         @default(0)
+  comments        Int         @default(0)
+  shares          Int         @default(0)
+  saves           Int         @default(0)  // Instagram
+
+  // Reach & impressions
+  reach           Int         @default(0)
+  impressions     Int         @default(0)
+
+  // Video metrics (Reels, Videos)
+  videoViews      Int?        // Views (3+ seconds)
+  videoPlays      Int?        // Total plays
+  videoAvgWatchTime Int?      // Average watch time in seconds
+  videoRetention  Float?      // Percentage watched
+
+  // Reel-specific metrics
+  reelPlays       Int?
+  reelReach       Int?
+  reelShares      Int?
+
+  // Click metrics
+  linkClicks      Int?
+  profileClicks   Int?
+
+  // Reactions breakdown (Facebook)
+  reactionsLike   Int?
+  reactionsLove   Int?
+  reactionsWow    Int?
+  reactionsHaha   Int?
+  reactionsSad    Int?
+  reactionsAngry  Int?
+
+  // Calculated metrics
+  engagementRate  Float?      // ((likes + comments + shares + saves) / reach) * 100
+  viralityRate    Float?      // (shares / reach) * 100
+
+  createdAt       DateTime    @default(now())
+
+  @@index([contentId])
+  @@index([snapshotAt])
+  @@index([engagementRate])
+}
+
+// fact_audience_demographics: Audience breakdown
+model FactAudienceDemographics {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  accountId       String
+  account         DimAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Snapshot info
+  snapshotAt      DateTime    @default(now())
+
+  // Demographic category
+  demographicType String      // "age_gender", "country", "city", "language"
+
+  // Breakdown data (JSON for flexibility)
+  // Example for age_gender: { "18-24_male": 1500, "18-24_female": 2200, ... }
+  // Example for country: { "NL": 5000, "BE": 1200, "DE": 800, ... }
+  breakdown       Json
+
+  // Total audience for this snapshot
+  totalAudience   Int
+
+  createdAt       DateTime    @default(now())
+
+  @@index([accountId])
+  @@index([demographicType])
+  @@index([snapshotAt])
+}
+
+// ==========================================
+// META BI HUB - PAID ADVERTISING TABLES
+// ==========================================
+
+enum AdStatus {
+  ACTIVE
+  PAUSED
+  DELETED
+  ARCHIVED
+  IN_REVIEW
+  DISAPPROVED
+}
+
+enum AdObjective {
+  AWARENESS
+  TRAFFIC
+  ENGAGEMENT
+  LEADS
+  APP_PROMOTION
+  SALES
+  CONVERSIONS
+}
+
+// dim_ad_campaign: Ad campaigns
+model DimAdCampaign {
+  id                String        @id @default(cuid())
+  externalId        String        // Meta's campaign ID
+
+  // Account reference
+  accountId         String
+  account           DimAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Campaign details
+  name              String
+  objective         AdObjective
+  status            AdStatus
+
+  // Budget
+  dailyBudget       Float?        // Daily budget in cents
+  lifetimeBudget    Float?        // Lifetime budget in cents
+
+  // Schedule
+  startTime         DateTime?
+  stopTime          DateTime?
+
+  // Relations
+  adSets            DimAdSet[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([accountId, externalId])
+  @@index([accountId])
+  @@index([status])
+  @@index([objective])
+}
+
+// dim_ad_set: Ad sets within campaigns
+model DimAdSet {
+  id                String        @id @default(cuid())
+  externalId        String        // Meta's ad set ID
+
+  // Campaign reference
+  campaignId        String
+  campaign          DimAdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  // Ad set details
+  name              String
+  status            AdStatus
+
+  // Targeting (stored as JSON for flexibility)
+  targeting         Json?         // Age, gender, interests, locations, etc.
+
+  // Budget & bidding
+  dailyBudget       Float?
+  lifetimeBudget    Float?
+  bidStrategy       String?       // "LOWEST_COST", "BID_CAP", etc.
+  bidAmount         Float?
+
+  // Optimization
+  optimizationGoal  String?       // "REACH", "LINK_CLICKS", "CONVERSIONS"
+
+  // Relations
+  ads               DimAd[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([campaignId, externalId])
+  @@index([campaignId])
+  @@index([status])
+}
+
+// dim_ad: Individual ads
+model DimAd {
+  id                String        @id @default(cuid())
+  externalId        String        // Meta's ad ID
+
+  // Ad set reference
+  adSetId           String
+  adSet             DimAdSet      @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+
+  // Ad details
+  name              String
+  status            AdStatus
+
+  // Creative
+  creativeType      String?       // "IMAGE", "VIDEO", "CAROUSEL"
+  headline          String?
+  bodyText          String?
+  callToAction      String?       // "LEARN_MORE", "SHOP_NOW", etc.
+  linkUrl           String?
+
+  // Relations
+  adInsights        FactAdInsightsDaily[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@unique([adSetId, externalId])
+  @@index([adSetId])
+  @@index([status])
+}
+
+// fact_ad_insights_daily: Daily ad performance metrics
+model FactAdInsightsDaily {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  adId            String
+  ad              DimAd       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  dateId          String
+  date            DimDate     @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Spend metrics
+  spend           Float       @default(0)  // Amount spent in cents
+
+  // Delivery metrics
+  impressions     Int         @default(0)
+  reach           Int         @default(0)
+  frequency       Float?      // impressions / reach
+
+  // Engagement metrics
+  clicks          Int         @default(0)
+  linkClicks      Int         @default(0)
+
+  // Video metrics
+  videoViews      Int?
+  videoP25        Int?        // Viewed 25%
+  videoP50        Int?        // Viewed 50%
+  videoP75        Int?        // Viewed 75%
+  videoP100       Int?        // Viewed 100%
+
+  // Conversion metrics
+  conversions     Int         @default(0)
+  conversionValue Float       @default(0)
+
+  // Calculated metrics
+  cpm             Float?      // Cost per 1000 impressions
+  cpc             Float?      // Cost per click
+  ctr             Float?      // Click-through rate
+  cpa             Float?      // Cost per acquisition
+  roas            Float?      // Return on ad spend
+
+  createdAt       DateTime    @default(now())
+
+  @@unique([adId, dateId])
+  @@index([adId])
+  @@index([dateId])
+  @@index([spend])
+}
+
+// ==========================================
+// EXTERNAL DATA SOURCES (CORRELATION ANALYSIS)
+// ==========================================
+
+// fact_weather_daily: Weather data for correlation analysis
+model FactWeatherDaily {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  dateId          String
+  date            DimDate     @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Location
+  locationLat     Float
+  locationLon     Float
+  locationName    String?     // City name
+
+  // Weather data
+  tempMin         Float?      // Min temperature (Celsius)
+  tempMax         Float?      // Max temperature
+  tempAvg         Float?      // Average temperature
+  feelsLike       Float?      // "Feels like" temperature
+
+  humidity        Int?        // Humidity percentage
+  pressure        Int?        // Atmospheric pressure (hPa)
+
+  windSpeed       Float?      // Wind speed (m/s)
+  windDirection   Int?        // Wind direction (degrees)
+
+  clouds          Int?        // Cloud cover percentage
+  visibility      Int?        // Visibility (meters)
+
+  // Weather condition
+  weatherMain     String?     // "Clear", "Clouds", "Rain", etc.
+  weatherDesc     String?     // Detailed description
+  weatherIcon     String?     // Icon code
+
+  // Precipitation
+  rain            Float?      // Rain volume (mm)
+  snow            Float?      // Snow volume (mm)
+
+  // UV Index
+  uvIndex         Float?
+
+  createdAt       DateTime    @default(now())
+
+  @@unique([dateId, locationLat, locationLon])
+  @@index([dateId])
+  @@index([weatherMain])
+}
+
+// fact_events_calendar: Events and festivals calendar
+model FactEventsCalendar {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  dateId          String
+  date            DimDate     @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Event details
+  eventName       String
+  eventType       String      // "festival", "holiday", "conference", "other"
+  eventDescription String?
+
+  // Location
+  location        String?
+  isVirtual       Boolean     @default(false)
+
+  // Timing
+  startTime       DateTime?
+  endTime         DateTime?
+  isAllDay        Boolean     @default(true)
+
+  // Impact metrics (filled after event)
+  expectedAttendance Int?
+  actualAttendance   Int?
+
+  // Tagging
+  tags            String[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([dateId])
+  @@index([eventType])
+}
+
+// fact_ticket_sales: Ticket sales data for correlation
+model FactTicketSales {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  dateId          String      // Sale date
+  date            DimDate     @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Event reference (if applicable)
+  eventName       String
+  eventDate       DateTime?
+
+  // Sales data
+  ticketsSold     Int
+  revenue         Float       // Revenue in cents
+  averagePrice    Float       // Average ticket price
+
+  // Ticket types breakdown (JSON)
+  ticketTypeBreakdown Json?   // { "Early Bird": 500, "Regular": 1200, "VIP": 100 }
+
+  // Channel breakdown
+  salesChannel    String?     // "online", "box_office", "partner"
+
+  createdAt       DateTime    @default(now())
+
+  @@index([dateId])
+  @@index([eventName])
+}
+
+// ==========================================
+// ANALYTICS & ML AGGREGATION TABLES
+// ==========================================
+
+// agg_content_performance: Aggregated content performance by type/period
+model AggContentPerformance {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  dateId          String
+  date            DimDate     @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Aggregation dimensions
+  platform        Platform
+  contentType     ContentType
+
+  // Aggregated metrics
+  totalContent    Int         // Number of posts
+  totalReach      BigInt      @default(0)
+  totalImpressions BigInt     @default(0)
+  totalEngagement Int         @default(0)
+
+  avgEngagementRate Float?
+  avgReachPerPost Float?
+
+  // Top performer
+  topContentId    String?     // ID of best performing content
+  topEngagementRate Float?
+
+  createdAt       DateTime    @default(now())
+
+  @@unique([dateId, platform, contentType])
+  @@index([platform])
+  @@index([contentType])
+  @@index([dateId])
+}
+
+// agg_optimal_posting_times: Optimal posting time analysis
+model AggOptimalPostingTimes {
+  id              String      @id @default(cuid())
+
+  // Dimension keys
+  timeId          String
+  time            DimTime     @relation(fields: [timeId], references: [id], onDelete: Cascade)
+
+  // Aggregation dimensions
+  platform        Platform
+  dayOfWeek       Int         // 0=Sunday, 6=Saturday
+  contentType     ContentType?
+
+  // Performance metrics
+  avgEngagementRate Float
+  avgReach        Float
+  sampleSize      Int         // Number of posts analyzed
+
+  // Confidence score (0-1)
+  confidenceScore Float
+
+  // Rank for this slot
+  rank            Int         // 1 = best time
+
+  // Analysis period
+  analyzedFrom    DateTime
+  analyzedTo      DateTime
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([timeId, platform, dayOfWeek, contentType])
+  @@index([platform])
+  @@index([dayOfWeek])
+  @@index([rank])
+}
+
+// ml_engagement_predictions: ML model predictions
+model MlEngagementPredictions {
+  id              String      @id @default(cuid())
+
+  // Content being predicted (can be draft or published)
+  contentId       String?     // Link to DimContent if published
+
+  // Input features
+  platform        Platform
+  contentType     ContentType
+  publishHour     Int         // Hour of day (0-23)
+  publishDayOfWeek Int        // Day of week (0-6)
+  captionLength   Int?
+  hashtagCount    Int?
+  hasMedia        Boolean     @default(true)
+  mediaType       String?     // "IMAGE", "VIDEO", "CAROUSEL"
+
+  // Historical context used
+  avgEngagementLast30d Float?
+  followerCount   Int?
+
+  // Predictions
+  predictedReach  Int
+  predictedEngagement Int
+  predictedEngagementRate Float
+
+  // Confidence intervals
+  reachLowerBound Int?
+  reachUpperBound Int?
+  engagementLowerBound Int?
+  engagementUpperBound Int?
+
+  // Model metadata
+  modelVersion    String      // Model version used
+  predictionConfidence Float  // 0-1 confidence score
+
+  // Actual performance (filled after posting)
+  actualReach     Int?
+  actualEngagement Int?
+  actualEngagementRate Float?
+  predictionError Float?      // (actual - predicted) / predicted
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([platform])
+  @@index([contentType])
+  @@index([modelVersion])
+  @@index([predictionConfidence])
+}
