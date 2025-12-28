@@ -1,0 +1,1143 @@
+// Prisma schema for Simplicate Automation System
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==========================================
+// USER & AUTHENTICATION
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  TEAM_MEMBER
+}
+
+// ==========================================
+// EXPENSE & PURCHASING INVOICE ENUMS
+// ==========================================
+
+enum ExpenseCategory {
+  KILOMETERS
+  TRAVEL
+  MATERIALS
+  SOFTWARE
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  INVOICED
+}
+
+enum PurchasingInvoiceStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PAID
+  REJECTED
+}
+
+enum EmailType {
+  INVOICE
+  CONTRACT
+  OTHER
+}
+
+enum TemplateSource {
+  UPLOADED
+  SIMPLICATE
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Employee type for rate calculations
+enum EmployeeType {
+  CO_OWNER      // Co-owners who invoice through their BV
+  FREELANCER    // External freelancers with variable rates
+  INTERNAL      // Internal employees (salaried)
+}
+
+// Error tracking enums
+enum ErrorSeverity {
+  CRITICAL  // System-breaking, requires immediate attention
+  HIGH      // Significant issues affecting multiple users/workflows
+  MEDIUM    // Isolated failures with retry capability
+  LOW       // Informational or expected failures
+}
+
+enum ErrorCategory {
+  WORKFLOW_ERROR      // Contract distribution, hours reminder, invoice generation failures
+  INTEGRATION_ERROR   // Simplicate API, email service, database errors
+  DATA_ERROR          // Missing data, invalid data, sync conflicts
+  SYSTEM_ERROR        // Queue processing, timeout, rate limit errors
+}
+
+enum ErrorStatus {
+  ACTIVE          // Currently occurring
+  ACKNOWLEDGED    // Seen by admin, being investigated
+  DISMISSED       // Intentionally ignored (false positive, known issue)
+  RESOLVED        // Manually fixed
+  AUTO_RESOLVED   // No occurrences for 24 hours
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  email                 String                 @unique
+  name                  String?
+  role                  UserRole               @default(TEAM_MEMBER)
+  emailVerified         DateTime?
+  image                 String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  // Simplicate integration
+  simplicateEmployeeId  String?                @unique
+
+  // Employee type and financial rates (synced from Simplicate)
+  employeeType          EmployeeType?
+  defaultSalesRate      Float?                 // from Simplicate hourly_sales_tariff
+  defaultCostRate       Float?                 // from Simplicate hourly_cost_tariff
+  simplicateEmployeeType String?               // Simplicate type.label (internal/external)
+
+  // Manual rate overrides (take precedence over synced values)
+  salesRateOverride     Float?
+  costRateOverride      Float?
+  ratesSyncedAt         DateTime?
+
+  // Relations
+  accounts              Account[]
+  sessions              Session[]
+  contracts             Contract[]
+  hoursEntries          HoursEntry[]
+  notifications         Notification[]
+  notificationPrefs     NotificationPreference?
+  projectMembers        ProjectMember[]
+  expenses              Expense[]
+  purchasingInvoices    PurchasingInvoice[]
+  serviceEmployeeRates  ServiceEmployeeRate[]
+  sentEmails            SentEmail[]
+  documentRequests      DocumentRequest[]
+
+  @@index([email])
+  @@index([simplicateEmployeeId])
+}
+
+// NextAuth models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// SIMPLICATE ENTITIES
+// ==========================================
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+model Project {
+  id                  String         @id @default(cuid())
+  simplicateId        String         @unique
+  name                String
+  description         String?
+  status              ProjectStatus  @default(ACTIVE)
+  startDate           DateTime?
+  endDate             DateTime?
+
+  // Project details
+  clientName          String?
+  projectNumber       String?
+  kmRate              Float?         // Project-specific kilometer rate for mileage expenses
+
+  // Sync tracking
+  lastSyncedAt        DateTime       @default(now())
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  // Relations
+  contracts           Contract[]
+  hoursEntries        HoursEntry[]
+  invoices            Invoice[]
+  automationLogs      AutomationLog[]
+  workflowConfig      WorkflowConfig?
+  members             ProjectMember[]
+  budget              ProjectBudget?
+  expenses            Expense[]
+  purchasingInvoices  PurchasingInvoice[]
+  services            ProjectService[]
+  sentEmails          SentEmail[]
+  documentRequests    DocumentRequest[]
+  errorRecords        ErrorRecord[]
+
+  @@index([simplicateId])
+  @@index([status])
+}
+
+// ==========================================
+// PROJECT SERVICES (DIENSTEN)
+// ==========================================
+
+model ProjectService {
+  id                  String        @id @default(cuid())
+  projectId           String
+  simplicateServiceId String        @unique
+
+  name                String
+  status              String        @default("open")
+  startDate           DateTime?
+  endDate             DateTime?
+
+  // Budget tracking
+  budgetHours         Float?        // Total budgeted hours
+  budgetAmount        Float?        // Total budgeted amount
+  defaultHourlyRate   Float?        // Default tariff
+
+  // Calculated fields (updated on sync)
+  usedHours           Float         @default(0)
+  usedAmount          Float         @default(0)
+
+  // Invoice settings
+  invoiceMethod       String?       // "Hours", "Fixed", etc.
+  trackHours          Boolean       @default(true)
+
+  // Hour type tariffs from Simplicate (for rate resolution)
+  hourTypeTariffs     Json?         // [{hourTypeId, tariff, budgetedAmount, billable}]
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // Relations
+  project             Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  hoursEntries        HoursEntry[]
+  employeeRates       ServiceEmployeeRate[]
+
+  @@index([projectId])
+  @@index([simplicateServiceId])
+}
+
+// ==========================================
+// SERVICE-EMPLOYEE RATE OVERRIDES
+// ==========================================
+
+model ServiceEmployeeRate {
+  id                  String         @id @default(cuid())
+  projectServiceId    String
+  userId              String
+
+  // Rate overrides at service-employee level (most specific)
+  salesRate           Float?
+  costRate            Float?
+  salesRateSource     String?        // "simplicate" | "manual"
+  costRateSource      String?        // "simplicate" | "manual"
+
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  // Relations
+  projectService      ProjectService @relation(fields: [projectServiceId], references: [id], onDelete: Cascade)
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectServiceId, userId])
+  @@index([projectServiceId])
+  @@index([userId])
+}
+
+// ==========================================
+// CONTRACT MANAGEMENT
+// ==========================================
+
+enum ContractStatus {
+  PENDING
+  SENT
+  SIGNED
+  REJECTED
+  EXPIRED
+}
+
+model Contract {
+  id                String         @id @default(cuid())
+  projectId         String
+  userId            String
+
+  // Contract details
+  templateName      String
+  templateUrl       String?
+
+  // Status tracking
+  status            ContractStatus @default(PENDING)
+  sentAt            DateTime?
+  signedAt          DateTime?
+  rejectedAt        DateTime?
+
+  // Document storage
+  signedDocumentUrl String?
+  uploadToken       String?        @unique // Secure token for upload
+
+  // Simplicate integration
+  simplicateDocumentId String?     @unique
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+  @@index([uploadToken])
+}
+
+// ==========================================
+// HOURS TRACKING
+// ==========================================
+
+enum HoursStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  INVOICED
+}
+
+model HoursEntry {
+  id                String          @id @default(cuid())
+  projectId         String
+  userId            String
+  projectServiceId  String?         // Link to dienst
+
+  // Hours details
+  hours             Float
+  date              DateTime
+  description       String?
+  billable          Boolean         @default(true)
+
+  // Financial tracking
+  salesRate         Float?          // Hourly billing rate (client)
+  costRate          Float?          // Hourly cost rate (employee)
+  revenue           Float?          // hours * salesRate
+  cost              Float?          // hours * costRate
+  margin            Float?          // revenue - cost
+  rateSource        String?         // "service-employee" | "project-member" | "user-override" | "user-default" | "simplicate"
+
+  // Status
+  status            HoursStatus     @default(PENDING)
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+
+  // Simplicate integration
+  simplicateHoursId String?         @unique
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relations
+  project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectService    ProjectService? @relation(fields: [projectServiceId], references: [id], onDelete: SetNull)
+  invoice           Invoice?        @relation(fields: [invoiceId], references: [id])
+  invoiceId         String?
+  purchaseInvoice   PurchasingInvoice? @relation(fields: [purchaseInvoiceId], references: [id])
+  purchaseInvoiceId String?
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([projectServiceId])
+  @@index([status])
+  @@index([date])
+}
+
+// ==========================================
+// INVOICING
+// ==========================================
+
+enum InvoiceStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id                    String         @id @default(cuid())
+  projectId             String
+
+  // Invoice details
+  invoiceNumber         String?        @unique
+  amount                Float          // total_excluding_vat
+  totalVat              Float?
+  totalInclVat          Float?
+  totalOutstanding      Float?
+  description           String?
+  comments              String?
+
+  // Date tracking
+  periodStart           DateTime
+  periodEnd             DateTime
+  dueDate               DateTime?
+
+  // Status
+  status                InvoiceStatus  @default(DRAFT)
+  approvedAt            DateTime?
+  sentAt                DateTime?
+  paidAt                DateTime?
+
+  // Client details
+  clientName            String?
+  clientOrganizationId  String?
+
+  // Payment terms
+  paymentTermDays       Int?
+  paymentTermName       String?
+
+  // Simplicate integration
+  simplicateInvoiceId   String?        @unique
+
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  // Relations
+  project               Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  hoursEntries          HoursEntry[]
+  invoiceLines          InvoiceLine[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([invoiceNumber])
+}
+
+model InvoiceLine {
+  id                  String     @id @default(cuid())
+  invoiceId           String
+  simplicateLineId    String?    @unique
+
+  // Line details
+  date                DateTime
+  description         String
+  hours               Float      // amount field from Simplicate
+  rate                Float      // price field from Simplicate
+
+  // Financial calculations
+  subtotal            Float      // hours × rate
+  vatPercentage       Float?
+  vatAmount           Float?
+  total               Float
+
+  // Tracking
+  serviceId           String?    // Simplicate service_id
+  projectServiceId    String?    // Link to local ProjectService
+
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  // Relations
+  invoice             Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([serviceId])
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+enum NotificationType {
+  CONTRACT_ASSIGNED
+  HOURS_REMINDER
+  INVOICE_GENERATED
+  CONTRACT_SIGNED
+  HOURS_APPROVED
+  SYSTEM_ALERT
+}
+
+enum NotificationChannel {
+  EMAIL
+  SLACK
+  IN_APP
+}
+
+model Notification {
+  id          String              @id @default(cuid())
+  userId      String
+
+  // Notification content
+  type        NotificationType
+  title       String
+  message     String
+  actionUrl   String?
+
+  // Delivery (stored as JSON for SQLite compatibility)
+  channels    String // JSON array of channels
+  sentAt      DateTime?
+  readAt      DateTime?
+
+  // Metadata
+  metadata    Json?
+
+  createdAt   DateTime            @default(now())
+
+  // Relations
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([readAt])
+}
+
+model NotificationPreference {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+
+  // Channel preferences
+  emailEnabled          Boolean   @default(true)
+  slackEnabled          Boolean   @default(false)
+  inAppEnabled          Boolean   @default(true)
+
+  // Notification type preferences
+  contractNotifications Boolean   @default(true)
+  hoursReminders        Boolean   @default(true)
+  invoiceNotifications  Boolean   @default(true)
+
+  // Reminder frequency (in days)
+  hoursReminderFrequency Int      @default(7)
+
+  // Slack integration
+  slackUserId           String?
+  slackWebhookUrl       String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// AUTOMATION & LOGGING
+// ==========================================
+
+enum WorkflowType {
+  CONTRACT_DISTRIBUTION
+  HOURS_REMINDER
+  INVOICE_GENERATION
+}
+
+enum AutomationStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  RETRYING
+}
+
+model AutomationLog {
+  id            String            @id @default(cuid())
+  projectId     String?
+
+  // Workflow details
+  workflowType  WorkflowType
+  status        AutomationStatus
+
+  // Execution tracking
+  startedAt     DateTime          @default(now())
+  completedAt   DateTime?
+
+  // Error handling
+  error         String?
+  retryCount    Int               @default(0)
+
+  // Metadata
+  metadata      Json?
+
+  // Relations
+  project       Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  errorRecords  ErrorRecord[]
+
+  @@index([workflowType])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// ==========================================
+// SYSTEM CONFIGURATION
+// ==========================================
+
+model SystemConfig {
+  id                        String   @id @default(cuid())
+  key                       String   @unique
+  value                     String
+  description               String?
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ==========================================
+// WORKFLOW CONFIGURATION
+// ==========================================
+
+model WorkflowConfig {
+  id                    String   @id @default(cuid())
+  projectId             String   @unique
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Workflow types enabled for this project
+  contractDistribution  Boolean  @default(false)
+  hoursReminder         Boolean  @default(false)
+  invoiceGeneration     Boolean  @default(false)
+
+  // Configuration for each workflow (stored as JSON)
+  contractConfig        Json?    // e.g., { "recipients": [...], "template": "..." }
+  hoursReminderConfig   Json?    // e.g., { "reminderDays": [1, 3, 7], "recipients": [...] }
+  invoiceConfig         Json?    // e.g., { "autoApprove": true, "template": "..." }
+
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([isActive])
+}
+
+// ==========================================
+// APPLICATION SETTINGS
+// ==========================================
+
+model AppSettings {
+  id                    String   @id @default(cuid())
+
+  // General Settings
+  siteName              String   @default("Simplicate Automations")
+  siteUrl               String?
+  timezone              String   @default("UTC")
+
+  // Expense Settings
+  kmRate                Float    @default(0.23)
+
+  // Appearance Settings
+  theme                 String   @default("light") // light, dark, system
+  accentColor           String   @default("#000000")
+
+  // Notification Settings
+  emailNotifications    Boolean  @default(true)
+  pushNotifications     Boolean  @default(true)
+  marketingEmails       Boolean  @default(false)
+
+  // Security Settings (metadata for UI display)
+  twoFactorEnabled      Boolean  @default(false)
+  sessionTimeout        Int      @default(86400) // seconds
+
+  // Sync timestamps
+  lastProjectsSyncAt    DateTime?
+  lastEmployeesSyncAt   DateTime?
+  lastHoursSyncAt       DateTime?
+  lastInvoicesSyncAt    DateTime?
+  lastMileageSyncAt     DateTime?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ==========================================
+// WEBHOOK TRACKING
+// ==========================================
+
+model WebhookEvent {
+  id            String   @id @default(cuid())
+
+  // Event details
+  eventType     String
+  payload       Json
+
+  // Processing
+  processed     Boolean  @default(false)
+  processedAt   DateTime?
+  error         String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([eventType])
+  @@index([processed])
+  @@index([createdAt])
+}
+
+// ==========================================
+// PROJECT MEMBERS & BUDGETS
+// ==========================================
+
+model ProjectMember {
+  id                  String   @id @default(cuid())
+  projectId           String
+  userId              String
+  simplicateServiceId String?  @unique
+
+  role                String?
+  hourlyRate          Float?   // Legacy field - use salesRate
+  budgetedHours       Float?
+
+  // Financial rates for this employee on this project
+  salesRate           Float?   // Client billing rate (override for this project)
+  costRate            Float?   // Employee cost rate (override for this project)
+  salesRateSource     String?  // "simplicate" | "manual"
+  costRateSource      String?  // "simplicate" | "manual"
+
+  joinedAt            DateTime @default(now())
+  leftAt              DateTime?
+
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model ProjectBudget {
+  id                  String   @id @default(cuid())
+  projectId           String   @unique
+  simplicateServiceId String?
+
+  totalBudgetHours    Float?
+  totalBudgetAmount   Float?
+  defaultHourlyRate   Float?
+
+  usedHours           Float    @default(0)
+  usedAmount          Float    @default(0)
+
+  updatedAt           DateTime @updatedAt
+
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// EXPENSES
+// ==========================================
+
+model Expense {
+  id                  String          @id @default(cuid())
+  projectId           String
+  userId              String
+  simplicateExpenseId String?         @unique
+
+  category            ExpenseCategory
+  description         String?
+  amount              Float
+  kilometers          Float?
+  date                DateTime
+  status              ExpenseStatus   @default(PENDING)
+  receiptUrl          String?
+
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  project             Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+}
+
+// ==========================================
+// PURCHASING INVOICES
+// ==========================================
+
+model PurchasingInvoice {
+  id                    String                   @id @default(cuid())
+  projectId             String
+  userId                String
+
+  periodStart           DateTime
+  periodEnd             DateTime
+
+  totalHours            Float
+  hourlyRate            Float
+  hoursAmount           Float
+
+  kmTotal               Float?
+  kmRate                Float?
+  kmAmount              Float?
+  expensesAmount        Float?
+  expenseDetails        Json?
+
+  subtotal              Float
+  vatRate               Float?
+  vatAmount             Float?
+  total                 Float
+
+  status                PurchasingInvoiceStatus @default(DRAFT)
+  uploadedDocUrl        String?
+  generatedDocUrl       String?
+
+  submittedAt           DateTime?
+  approvedAt            DateTime?
+  paidAt                DateTime?
+
+  simplicateInvoiceId   String?                  @unique
+
+  // Inbound email & OCR tracking
+  sourceEmailId         String?                  @unique
+  sourceEmail           InboundEmail?            @relation(fields: [sourceEmailId], references: [id])
+  ocrData               Json?                    // Raw OCR extraction result
+  ocrConfidence         Float?                   // Confidence score (0-1)
+  needsReview           Boolean                  @default(true) // Flag for manual review
+
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                  User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hoursEntries          HoursEntry[]
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+  @@index([sourceEmailId])
+  @@index([needsReview])
+}
+
+// ==========================================
+// CONTRACT TEMPLATES
+// ==========================================
+
+model ContractTemplate {
+  id              String         @id @default(cuid())
+  name            String
+  description     String?
+
+  source          TemplateSource
+  fileUrl         String?
+  simplicateDocId String?
+
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+// ==========================================
+// WORKFLOW QUEUE
+// ==========================================
+
+model WorkflowQueue {
+  id            String       @id @default(cuid())
+  workflowType  WorkflowType
+  projectId     String?
+  userId        String?
+
+  payload       Json
+  status        QueueStatus  @default(PENDING)
+  attempts      Int          @default(0)
+  maxAttempts   Int          @default(3)
+
+  scheduledFor  DateTime     @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  error         String?
+
+  createdAt     DateTime     @default(now())
+
+  // Relations
+  errorRecords  ErrorRecord[]
+
+  @@index([status, scheduledFor])
+  @@index([workflowType])
+}
+
+// ==========================================
+// FILTER PRESETS
+// ==========================================
+
+model FilterPreset {
+  id          String   @id @default(cuid())
+  userId      String?  // Null = shared/system preset
+
+  name        String
+  page        String   // e.g., "hours", "invoices", "contracts"
+  filters     Json     // { months: [], projects: [], employees: [], sortBy, sortOrder }
+  isDefault   Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, page])
+  @@index([page])
+}
+
+// ==========================================
+// EMAIL AUTOMATION
+// ==========================================
+
+enum EmailTemplateType {
+  CONTRACT_REMINDER
+  HOURS_REMINDER
+  HOURS_REPORT
+  CUSTOM
+}
+
+enum SentEmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum DocumentRequestStatus {
+  PENDING
+  UPLOADED
+  VERIFIED
+  REJECTED
+}
+
+model EmailTemplate {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  type        EmailTemplateType
+  description String?
+
+  // Content (Dutch by default, supports {{variables}})
+  subject     String
+  bodyHtml    String            // HTML with {{variables}}
+
+  // Available variables for this template (JSON array)
+  variables   String?           // e.g., '["memberName", "projectName", "uploadUrl"]'
+
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  sentEmails  SentEmail[]
+}
+
+model SentEmail {
+  id          String          @id @default(cuid())
+  templateId  String?
+  projectId   String?
+  userId      String
+
+  toEmail     String
+  subject     String
+
+  status      SentEmailStatus @default(PENDING)
+  sentAt      DateTime?
+  error       String?
+
+  // Resend tracking (for future webhook integration)
+  resendId    String?         @unique
+
+  createdAt   DateTime        @default(now())
+
+  template    EmailTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  project     Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([status])
+}
+
+model DocumentRequest {
+  id             String                @id @default(cuid())
+  projectId      String
+  userId         String
+
+  // Request details
+  type           String                // "contract", "document", etc.
+  description    String?
+
+  // Secure upload token
+  uploadToken    String                @unique
+  tokenExpiresAt DateTime?
+
+  // Status tracking
+  status         DocumentRequestStatus @default(PENDING)
+  requestedAt    DateTime              @default(now())
+  uploadedAt     DateTime?
+  verifiedAt     DateTime?
+
+  // Document storage (Vercel Blob)
+  documentUrl    String?
+  documentName   String?
+  documentSize   Int?
+
+  // Link to sent email
+  sentEmailId    String?
+
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  project        Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([uploadToken])
+  @@index([status])
+}
+
+// ==========================================
+// INBOUND EMAIL PROCESSING
+// ==========================================
+
+model InboundEmail {
+  id            String   @id @default(cuid())
+  from          String
+  to            String
+  subject       String
+  body          String?  @db.Text
+  receivedAt    DateTime @default(now())
+
+  // Classification
+  type          EmailType?  // INVOICE | CONTRACT | OTHER
+  classifiedBy  String?     // ADDRESS | SUBJECT | AI | MANUAL
+
+  // Processing
+  processed     Boolean  @default(false)
+  processedAt   DateTime?
+  error         String?  @db.Text
+
+  // Relations
+  attachments   EmailAttachment[]
+  invoice       PurchasingInvoice?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([from])
+  @@index([to])
+  @@index([receivedAt])
+  @@index([processed])
+  @@index([type])
+}
+
+model EmailAttachment {
+  id            String   @id @default(cuid())
+  emailId       String
+  filename      String
+  contentType   String
+  size          Int
+  data          Bytes    // Store directly in DB (or use Vercel Blob for large files)
+
+  email         InboundEmail @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+
+  @@index([emailId])
+}
+
+// ==========================================
+// ERROR TRACKING & MONITORING
+// ==========================================
+
+model ErrorRecord {
+  id                String         @id @default(cuid())
+
+  // Classification
+  severity          ErrorSeverity
+  category          ErrorCategory
+  errorType         String         // Specific error type (e.g., "EMAIL_SERVICE_ERROR")
+
+  // Error details
+  message           String
+  stackTrace        String?        @db.Text
+  context           Json?          // Related entity IDs, metadata, request data
+
+  // Status tracking
+  status            ErrorStatus    @default(ACTIVE)
+  firstOccurrence   DateTime       @default(now())
+  lastOccurrence    DateTime       @default(now())
+  occurrenceCount   Int            @default(1)
+
+  // Resolution tracking
+  acknowledgedBy    String?
+  acknowledgedAt    DateTime?
+  resolvedBy        String?
+  resolvedAt        DateTime?
+  resolutionNotes   String?        @db.Text
+
+  // Relations
+  automationLogId   String?
+  automationLog     AutomationLog? @relation(fields: [automationLogId], references: [id])
+  queueItemId       String?
+  queueItem         WorkflowQueue? @relation(fields: [queueItemId], references: [id])
+  projectId         String?
+  project           Project?       @relation(fields: [projectId], references: [id])
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Indexes for performance
+  @@index([severity, status])
+  @@index([category, status])
+  @@index([firstOccurrence])
+  @@index([automationLogId])
+  @@index([queueItemId])
+}
+
+// ==========================================
+// MARGIN SETTINGS
+// ==========================================
+
+model MarginSettings {
+  id                String   @id @default(cuid())
+  targetMargin      Float    @default(40)    // Healthy margin target (%)
+  warningThreshold  Float    @default(25)    // Yellow zone threshold (%)
+  criticalThreshold Float    @default(15)    // Red zone threshold (%)
+  updatedAt         DateTime @updatedAt
+  updatedBy         String?
+}

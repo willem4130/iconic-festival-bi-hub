@@ -1,0 +1,590 @@
+// Minimal Next.js Fullstack Template Schema
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// USER & AUTHENTICATION
+// ==========================================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  role          UserRole  @default(USER)
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Authentication relations
+  accounts      Account[]
+  sessions      Session[]
+
+  // Warehouse optimizer relations
+  projectsCreated             Project[]              @relation("ProjectCreatedBy")
+  uploads                     Upload[]               @relation("UploadUploadedBy")
+  subsetsCreated              Subset[]               @relation("SubsetCreatedBy")
+  transformationPipelinesCreated TransformationPipeline[] @relation("PipelineCreatedBy")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ==========================================
+// APPLICATION SETTINGS
+// ==========================================
+
+model AppSettings {
+  id                    String   @id @default(cuid())
+
+  // General Settings
+  siteName              String   @default("My App")
+  siteUrl               String?
+  timezone              String   @default("UTC")
+
+  // Appearance Settings
+  theme                 String   @default("system")
+  accentColor           String   @default("#000000")
+
+  // Notification Settings
+  emailNotifications    Boolean  @default(true)
+  pushNotifications     Boolean  @default(false)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// ==========================================
+// WAREHOUSE PICK OPTIMIZER MODELS
+// ==========================================
+
+// Upload status tracking
+enum UploadStatus {
+  UPLOADING         // File upload in progress
+  MAPPING           // Column mapping in progress
+  VALIDATING        // Data validation in progress
+  TRANSFORMING      // Bay transformation in progress
+  COMPLETED         // All steps completed successfully
+  FAILED            // Processing failed
+}
+
+// Validation severity levels
+enum ValidationSeverity {
+  ERROR             // Critical - blocks export
+  WARNING           // Non-critical - allows export
+  INFO              // Informational only
+}
+
+// Bay transformation strategies
+enum BayTransformStrategy {
+  NAMING_CONVENTION // Use naming patterns (e.g., "Bay-A-*" -> "Bay A")
+  PHYSICAL_PROXIMITY // Group by physical coordinates
+  MANUAL_MAPPING    // User-defined bay groupings
+}
+
+// Project: Top-level container for warehouse optimization work
+model Project {
+  id                    String            @id @default(cuid())
+  name                  String
+  description           String?
+  clientName            String?           // Client company name
+
+  // User reference (admin who created the project)
+  createdByUserId       String
+  createdBy             User              @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  // Project metadata
+  isArchived            Boolean           @default(false)
+  archivedAt            DateTime?
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relations
+  uploads               Upload[]
+  mappingConfigs        MappingConfig[]
+  subsets               Subset[]
+
+  @@index([createdByUserId])
+  @@index([isArchived])
+  @@index([createdAt])
+}
+
+// Upload: Represents a single file upload with processing status
+model Upload {
+  id                    String            @id @default(cuid())
+
+  // Project reference
+  projectId             String
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // File metadata
+  fileName              String
+  originalFileName      String
+  fileSize              Int               // Bytes
+  filePath              String            // Vercel Blob URL
+  mimeType              String            @default("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+  // Processing status
+  status                UploadStatus      @default(UPLOADING)
+  statusMessage         String?           // Error message if failed
+
+  // Processing metadata
+  totalRows             Int               @default(0)
+  processedRows         Int               @default(0)
+
+  // Upload tracking
+  uploadedByUserId      String
+  uploadedBy            User              @relation("UploadUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: Cascade)
+
+  // Processing configuration
+  mappingConfigId       String?
+  mappingConfig         MappingConfig?    @relation(fields: [mappingConfigId], references: [id], onDelete: SetNull)
+
+  // Bay transformation settings
+  bayTransformStrategy  BayTransformStrategy?
+  bayTransformConfig    Json?             // Strategy-specific configuration
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  completedAt           DateTime?
+
+  // Relations
+  picks                 Pick[]
+  locations             Location[]
+  bays                  Bay[]
+  validationErrors      ValidationError[]
+  paretoAnalyses        ParetoAnalysis[]
+  locationUtilizations  LocationUtilization[]
+  transformationPipelines TransformationPipeline[]
+
+  @@index([projectId])
+  @@index([uploadedByUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([fileName])
+}
+
+// Pick: Article pick information from client data
+model Pick {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Template columns (7 required)
+  article               String            // Article number/code
+  articleDescription    String            // Article description
+  family                String            // Article family/category
+  pickFrequency         Float             // Picks per time period
+  location              String            // Location code (must exist in Location table)
+  quantity              Float             // Quantity per pick
+  uniqueArticles        Int               // Number of unique articles
+
+  // Extra dimensions (from client data beyond template requirements)
+  extraDimensions       ExtraDimension[]
+
+  // Relations
+  articleLocations      ArticleLocation[]
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([uploadId])
+  @@index([article])
+  @@index([location])
+  @@index([family])
+  @@index([pickFrequency])
+  @@unique([uploadId, article, location]) // Composite unique constraint
+}
+
+// Location: Physical warehouse location from client data
+model Location {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Template columns (8 required)
+  location              String            // Location code (primary key in template)
+  storageType           String            // Storage type (e.g., "Pallet", "Shelf")
+  locationLength        Float             // Length (meters)
+  locationWidth         Float             // Width (meters)
+  locationHeight        Float             // Height (meters)
+  capacityLayout        String            // e.g., "0.25-0.25-0.25-0.25" (must sum to 1.0)
+  locationCategory      String            // Category (e.g., "A", "B", "C")
+  bay                   String            // Bay identifier (transformed from client data)
+
+  // Parsed capacity layout (JSON array of floats that sum to 1.0)
+  parsedCapacityLayout  Json              // [0.25, 0.25, 0.25, 0.25]
+
+  // Calculated fields
+  totalCapacity         Float             // Length * Width * Height
+
+  // Bay reference (after transformation)
+  bayId                 String?
+  bayModel              Bay?              @relation(fields: [bayId], references: [id], onDelete: SetNull)
+
+  // Extra dimensions
+  extraDimensions       ExtraDimension[]
+
+  // Relations
+  articleLocations      ArticleLocation[]
+  locationUtilizations  LocationUtilization[]
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([uploadId, location]) // Location code must be unique within upload
+  @@index([uploadId])
+  @@index([bay])
+  @@index([bayId])
+  @@index([storageType])
+  @@index([locationCategory])
+}
+
+// Bay: Grouped locations (transformed from client data)
+model Bay {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Bay identification
+  bayCode               String            // Unique bay code (e.g., "Bay-A", "Zone-1")
+  bayName               String?           // Display name
+
+  // Bay category (for grouping/analysis)
+  category              BayCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId            String?
+
+  // Calculated metrics
+  locationCount         Int               // Number of locations in this bay
+  uniqueArticles        Int               // Number of unique articles in this bay
+  totalPickFrequency    Float             // Sum of pick frequencies
+
+  // CRITICAL: Referential integrity check
+  // uniqueArticles <= locationCount must always be true
+
+  // Relations
+  locations             Location[]
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([uploadId, bayCode]) // Bay code must be unique within upload
+  @@index([uploadId])
+  @@index([categoryId])
+  @@index([uniqueArticles])
+}
+
+// BayCategory: User-defined categories for grouping bays
+model BayCategory {
+  id                    String            @id @default(cuid())
+  name                  String
+  description           String?
+  color                 String?           // Hex color for UI visualization
+
+  // Relations
+  bays                  Bay[]
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@unique([name])
+}
+
+// ArticleLocation: Junction table for Pick-Location relationship with pick metrics
+model ArticleLocation {
+  id                    String            @id @default(cuid())
+
+  // References
+  pickId                String
+  pick                  Pick              @relation(fields: [pickId], references: [id], onDelete: Cascade)
+
+  locationId            String
+  location              Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  // Metrics
+  pickFrequency         Float             // Picks per time period
+  quantity              Float             // Quantity at this location
+
+  createdAt             DateTime          @default(now())
+
+  @@unique([pickId, locationId])
+  @@index([pickId])
+  @@index([locationId])
+}
+
+// ValidationError: Data validation errors and warnings
+model ValidationError {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Error details
+  severity              ValidationSeverity
+  errorCode             String            // e.g., "ORPHAN_PICK", "INVALID_CAPACITY_LAYOUT"
+  errorMessage          String
+
+  // Location in file
+  rowNumber             Int?              // Row number in Excel file (1-indexed)
+  columnName            String?           // Column that caused the error
+
+  // Affected data
+  affectedValue         String?           // The problematic value
+  suggestedFix          String?           // Suggested correction
+
+  createdAt             DateTime          @default(now())
+
+  @@index([uploadId])
+  @@index([severity])
+  @@index([errorCode])
+}
+
+// ExtraDimension: Captures client dimensions beyond template requirements
+model ExtraDimension {
+  id                    String            @id @default(cuid())
+
+  // Polymorphic reference (either Pick or Location)
+  pickId                String?
+  pick                  Pick?             @relation(fields: [pickId], references: [id], onDelete: Cascade)
+
+  locationId            String?
+  location              Location?         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  // Dimension details
+  dimensionName         String            // Original column name from client file
+  dimensionValue        String            // Value (stored as string, can be parsed later)
+  dataType              String            // "string", "number", "date", "boolean"
+
+  createdAt             DateTime          @default(now())
+
+  @@index([pickId])
+  @@index([locationId])
+  @@index([dimensionName])
+}
+
+// MappingConfig: Column mapping configuration (client columns -> template columns)
+model MappingConfig {
+  id                    String            @id @default(cuid())
+
+  // Project reference
+  projectId             String
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Configuration details
+  name                  String            // e.g., "Client ABC Standard Mapping"
+  description           String?
+
+  // Mapping JSON (client column name -> template column name)
+  // Example: { "artikelnummer": "article", "omschrijving": "articleDescription" }
+  pickMapping           Json              // Mapping for PICK sheet
+  locationMapping       Json              // Mapping for LOCATION sheet
+
+  // Auto-detection settings
+  autoDetectThreshold   Float             @default(0.8) // Confidence threshold (0.0-1.0)
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relations
+  uploads               Upload[]
+
+  @@index([projectId])
+}
+
+// ParetoAnalysis: KEY FEATURE - Multi-dimensional Pareto analysis
+model ParetoAnalysis {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Analysis parameters
+  dimension             String            // "pickFrequency", "uniqueArticles", "family", etc.
+  groupBy               String?           // Optional grouping (e.g., "bay", "locationCategory")
+
+  // Pareto results (JSON)
+  // Example: [{ label: "Article-A", value: 100, percent: 25, cumulative: 25 }, ...]
+  paretoData            Json
+
+  // Metadata
+  calculatedAt          DateTime          @default(now())
+
+  @@index([uploadId])
+  @@index([dimension])
+  @@index([calculatedAt])
+}
+
+// LocationUtilization: Location usage metrics for BI dashboards
+model LocationUtilization {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Location reference
+  locationId            String
+  location              Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  // Utilization metrics
+  occupancyPercent      Float             // 0.0 - 100.0
+  pickDensity           Float             // Picks per cubic meter
+  turnoverRate          Float             // Pick frequency / capacity
+
+  // Classification
+  utilizationClass      String            // "Underutilized", "Optimal", "Overutilized"
+
+  calculatedAt          DateTime          @default(now())
+
+  @@unique([uploadId, locationId])
+  @@index([uploadId])
+  @@index([locationId])
+  @@index([utilizationClass])
+}
+
+// Subset: User-defined data subsets for focused analysis
+model Subset {
+  id                    String            @id @default(cuid())
+
+  // Project reference
+  projectId             String
+  project               Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Subset details
+  name                  String
+  description           String?
+
+  // Filter criteria (JSON)
+  // Example: { "family": ["Electronics", "Clothing"], "locationCategory": ["A"] }
+  filterCriteria        Json
+
+  // User reference
+  createdByUserId       String
+  createdBy             User              @relation("SubsetCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([createdByUserId])
+}
+
+// TransformationPipeline: Power Query & DAX transformation pipelines
+model TransformationPipeline {
+  id                    String            @id @default(cuid())
+
+  // Upload reference
+  uploadId              String
+  upload                Upload            @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  // Pipeline details
+  name                  String
+  description           String?
+
+  // Pipeline steps (JSON array of transformation steps)
+  // Example: [{ type: "filter", column: "pickFrequency", operator: ">", value: 10 }, ...]
+  steps                 Json
+
+  // Execution metadata
+  isActive              Boolean           @default(true)
+  lastExecutedAt        DateTime?
+  executionCount        Int               @default(0)
+
+  // User reference
+  createdByUserId       String
+  createdBy             User              @relation("PipelineCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relations
+  calculatedFields      CalculatedField[]
+
+  @@index([uploadId])
+  @@index([createdByUserId])
+  @@index([isActive])
+}
+
+// CalculatedField: DAX calculated fields for custom metrics
+model CalculatedField {
+  id                    String            @id @default(cuid())
+
+  // Pipeline reference
+  pipelineId            String
+  pipeline              TransformationPipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  // Field details
+  fieldName             String            // Name of the calculated field
+  daxFormula            String            // DAX formula (e.g., "SUM(Pick[pickFrequency])")
+  description           String?
+
+  // Execution
+  lastResult            Json?             // Cached result
+  lastCalculatedAt      DateTime?
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([pipelineId])
+  @@index([fieldName])
+}
