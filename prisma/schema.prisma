@@ -701,6 +701,9 @@ model DimContent {
 
   // Relations
   contentInsights   FactContentInsights[]
+  links             DimLink[]
+  contentHashtags   FactContentHashtag[]
+  commentSentiments FactCommentSentiment[]
 
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -745,6 +748,11 @@ model DimDate {
   events                  FactEventsCalendar[]
   ticketSales             FactTicketSales[]
   contentPerformance      AggContentPerformance[]
+  linkClicks              FactLinkClicks[]
+  attributionDaily        AggAttributionDaily[]
+  hashtagTrends           FactHashtagTrends[]
+  sentimentDaily          AggSentimentDaily[]
+  brandMentions           FactBrandMention[]
 
   @@index([year, month])
   @@index([isWeekend])
@@ -1324,4 +1332,386 @@ model MlEngagementPredictions {
   @@index([contentType])
   @@index([modelVersion])
   @@index([predictionConfidence])
+}
+
+// ==========================================
+// LINK ATTRIBUTION (Short.io Integration)
+// ==========================================
+
+// dim_link: Tracked short links for attribution
+model DimLink {
+  id              String    @id @default(cuid())
+  shortUrl        String    @unique  // Short.io generated URL
+  originalUrl     String              // Target URL (ticket page)
+  shortCode       String?             // The short code portion (e.g., "abc123")
+
+  // Attribution metadata (UTM parameters)
+  utmSource       String?             // "facebook", "instagram"
+  utmMedium       String?             // "post", "story", "ad", "bio"
+  utmCampaign     String?             // "summer_festival_2025"
+  utmContent      String?             // Post ID or creative identifier
+  utmTerm         String?             // Optional keyword/term
+
+  // Link to content (optional - for tracking which post used this link)
+  contentId       String?
+  content         DimContent? @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  // Short.io metadata
+  externalId      String?   @unique   // Short.io link ID
+  domain          String?             // Custom domain used
+  title           String?             // Link title for reference
+
+  // Aggregate statistics (updated from webhooks)
+  totalClicks     Int       @default(0)
+  uniqueClicks    Int       @default(0)
+
+  // Status
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  clickEvents     FactLinkClicks[]
+
+  @@index([contentId])
+  @@index([utmCampaign])
+  @@index([utmSource])
+  @@index([createdAt])
+  @@index([isActive])
+}
+
+// fact_link_clicks: Individual click events with attribution
+model FactLinkClicks {
+  id              String    @id @default(cuid())
+
+  // Dimension keys
+  linkId          String
+  link            DimLink   @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  dateId          String
+  date            DimDate   @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Click metadata from Short.io webhook
+  clickTimestamp  DateTime
+  externalClickId String?   @unique   // Short.io click ID
+
+  // Geographic data
+  country         String?             // "NL", "BE", "DE"
+  city            String?
+  region          String?             // Province/state
+
+  // Device & browser
+  deviceType      String?             // "mobile", "desktop", "tablet"
+  browser         String?             // "Chrome", "Safari", etc.
+  os              String?             // "iOS", "Android", "Windows"
+
+  // Referrer info
+  referer         String?             // Where the click came from
+  refererDomain   String?             // Domain only
+
+  // Conversion tracking (if ticket purchased)
+  converted       Boolean   @default(false)
+  conversionValue Float?              // Revenue in cents
+  conversionType  String?             // "ticket_purchase", "signup", etc.
+
+  // Bot detection
+  isBot           Boolean   @default(false)
+
+  createdAt       DateTime  @default(now())
+
+  @@index([linkId])
+  @@index([dateId])
+  @@index([clickTimestamp])
+  @@index([converted])
+  @@index([country])
+  @@index([deviceType])
+}
+
+// agg_attribution_daily: Daily aggregated link attribution metrics
+model AggAttributionDaily {
+  id              String    @id @default(cuid())
+
+  dateId          String
+  date            DimDate   @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Clicks by platform (UTM source)
+  facebookClicks  Int       @default(0)
+  instagramClicks Int       @default(0)
+  otherClicks     Int       @default(0)
+
+  // Clicks by content type (UTM medium)
+  postClicks      Int       @default(0)
+  storyClicks     Int       @default(0)
+  reelClicks      Int       @default(0)
+  adClicks        Int       @default(0)
+  bioClicks       Int       @default(0)
+
+  // Geographic breakdown (top countries)
+  clicksByCountry Json?               // {"NL": 500, "BE": 120, "DE": 80}
+
+  // Device breakdown
+  mobileClicks    Int       @default(0)
+  desktopClicks   Int       @default(0)
+  tabletClicks    Int       @default(0)
+
+  // Conversions
+  totalConversions Int      @default(0)
+  conversionValue Float     @default(0)
+  conversionRate  Float?              // (conversions / total clicks) * 100
+
+  // Totals
+  totalClicks     Int       @default(0)
+  uniqueClicks    Int       @default(0)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([dateId])
+  @@index([dateId])
+}
+
+// ==========================================
+// HASHTAG ANALYTICS (RiteTag Integration)
+// ==========================================
+
+// dim_hashtag: Hashtag dimension for tracking performance
+model DimHashtag {
+  id              String    @id @default(cuid())
+  hashtag         String    @unique   // "#iconicfestival" (lowercase, with #)
+  hashtagClean    String              // "iconicfestival" (without #)
+
+  // RiteTag metrics (updated periodically)
+  exposure        Int?                // Estimated hourly exposure
+  retweets        Int?                // Expected retweets/shares per hour
+  images          Int?                // Posts with images using tag
+  links           Int?                // Posts with links using tag
+  mentions        Int?                // Mentions per hour
+
+  // RiteTag color (trending status)
+  // green = hot/trending, blue = good for reach, red = avoid/overused
+  color           String?             // "green", "blue", "red", "grey"
+
+  // Usage tracking in our content
+  timesUsed       Int       @default(0)
+  lastUsedAt      DateTime?
+
+  // Performance metrics (calculated from our data)
+  avgEngagementRate Float?
+  avgReach        Float?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  contentHashtags FactContentHashtag[]
+  hashtagTrends   FactHashtagTrends[]
+
+  @@index([hashtag])
+  @@index([color])
+  @@index([timesUsed])
+}
+
+// fact_content_hashtag: Many-to-many hashtag usage per content
+model FactContentHashtag {
+  id              String    @id @default(cuid())
+
+  contentId       String
+  content         DimContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  hashtagId       String
+  hashtag         DimHashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  // Position in caption (for hashtag optimization analysis)
+  position        Int?                // 0 = first hashtag, null = unknown
+  inCaption       Boolean   @default(true)  // vs in first comment
+
+  createdAt       DateTime  @default(now())
+
+  @@unique([contentId, hashtagId])
+  @@index([contentId])
+  @@index([hashtagId])
+}
+
+// fact_hashtag_trends: Daily hashtag trending data from RiteTag
+model FactHashtagTrends {
+  id              String    @id @default(cuid())
+
+  hashtagId       String
+  hashtag         DimHashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+  dateId          String
+  date            DimDate   @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // RiteTag metrics snapshot
+  exposure        Int
+  retweets        Int
+  links           Int
+  images          Int
+  mentions        Int
+  color           String              // Trending status
+
+  createdAt       DateTime  @default(now())
+
+  @@unique([hashtagId, dateId])
+  @@index([hashtagId])
+  @@index([dateId])
+  @@index([color])
+}
+
+// ==========================================
+// SENTIMENT ANALYSIS (AWS Comprehend)
+// ==========================================
+
+// fact_comment_sentiment: Sentiment analysis of comments
+model FactCommentSentiment {
+  id              String    @id @default(cuid())
+
+  // Content reference
+  contentId       String
+  content         DimContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Comment metadata
+  commentId       String    @unique   // External comment ID from Meta
+  commentText     String              // The actual comment text
+  commentAuthor   String?             // Author name/username
+  commentedAt     DateTime            // When the comment was posted
+
+  // AWS Comprehend results
+  sentimentLabel  String              // "POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"
+  sentimentScore  Float               // Confidence 0-1 for the label
+  positiveScore   Float?              // Individual sentiment scores
+  negativeScore   Float?
+  neutralScore    Float?
+  mixedScore      Float?
+
+  // Key phrases extracted
+  keyPhrases      String[]            // ["amazing lineup", "best festival"]
+
+  // Entities detected (JSON for flexibility)
+  entities        Json?               // [{type: "EVENT", text: "Iconic Festival", score: 0.95}]
+
+  // Language detected
+  language        String?             // "en", "nl", "de"
+
+  // Flags
+  requiresResponse Boolean  @default(false)  // Negative sentiment needing attention
+  responded       Boolean   @default(false)
+
+  createdAt       DateTime  @default(now())
+
+  @@index([contentId])
+  @@index([sentimentLabel])
+  @@index([commentedAt])
+  @@index([requiresResponse])
+}
+
+// agg_sentiment_daily: Aggregated sentiment scores by day
+model AggSentimentDaily {
+  id              String    @id @default(cuid())
+
+  dateId          String
+  date            DimDate   @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Aggregated metrics
+  totalComments   Int
+  positiveCount   Int
+  negativeCount   Int
+  neutralCount    Int
+  mixedCount      Int
+
+  // Average scores
+  avgSentimentScore Float             // Weighted average
+  avgPositiveScore Float?
+  avgNegativeScore Float?
+
+  // Trend indicator (calculated from previous day comparison)
+  sentimentTrend  String?             // "improving", "declining", "stable"
+  trendDelta      Float?              // Change from previous day
+
+  // Top phrases (JSON array)
+  topPositivePhrases Json?            // ["amazing", "best ever", ...]
+  topNegativePhrases Json?            // ["disappointed", "too expensive", ...]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([dateId])
+  @@index([dateId])
+  @@index([sentimentTrend])
+}
+
+// ==========================================
+// SOCIAL LISTENING (Brand24 Integration)
+// ==========================================
+
+// dim_mention_source: Sources of brand mentions
+model DimMentionSource {
+  id              String    @id @default(cuid())
+  platform        String              // "twitter", "facebook", "instagram", "reddit", "news", "blog"
+  sourceUrl       String?   @unique   // Original source URL
+  sourceName      String?             // "Reddit r/festivals", "Twitter @user", "NOS Nieuws"
+
+  // Source metadata
+  isVerified      Boolean   @default(false)  // Verified account/publication
+  followerCount   Int?                // For social media sources
+  domainAuthority Int?                // For websites (0-100)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  mentions        FactBrandMention[]
+
+  @@index([platform])
+}
+
+// fact_brand_mention: Social listening mentions from Brand24
+model FactBrandMention {
+  id              String    @id @default(cuid())
+
+  // Source reference
+  sourceId        String
+  source          DimMentionSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  dateId          String
+  date            DimDate   @relation(fields: [dateId], references: [id], onDelete: Cascade)
+
+  // Mention details
+  externalId      String    @unique   // Brand24 mention ID
+  mentionText     String              // The actual mention text
+  mentionUrl      String?             // URL to the mention
+  authorName      String?             // Author name
+  authorHandle    String?             // @handle
+  authorFollowers Int?                // Author's follower count
+
+  // Timing
+  mentionedAt     DateTime
+
+  // Sentiment (from Brand24)
+  sentiment       String              // "positive", "negative", "neutral"
+  sentimentScore  Float?              // Confidence score
+
+  // Reach/influence metrics
+  reach           Int?                // Estimated reach
+  engagement      Int?                // Likes, shares, comments
+  shareOfVoice    Float?              // Percentage of total mentions
+
+  // Keywords matched
+  keywords        String[]            // ["iconic", "festival", "tickets"]
+
+  // Categorization
+  mentionType     String?             // "review", "question", "complaint", "praise"
+
+  // Flags
+  isInfluencer    Boolean   @default(false)  // High-reach mention
+  requiresResponse Boolean  @default(false)  // Negative mention needing attention
+  responded       Boolean   @default(false)
+  responseUrl     String?             // URL to our response
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([sourceId])
+  @@index([dateId])
+  @@index([sentiment])
+  @@index([mentionedAt])
+  @@index([requiresResponse])
+  @@index([isInfluencer])
 }

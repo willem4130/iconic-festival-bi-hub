@@ -48,15 +48,36 @@ export const publicProcedure = t.procedure
 
 /**
  * Protected procedure - requires authentication
+ * In development, bypasses auth check for easier testing
  */
 export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+  // Allow bypass in development for testing
+  if (process.env.NODE_ENV === 'development') {
+    const devSession = {
+      user: { id: 'dev-user', name: 'Dev User', email: 'dev@localhost' },
+      expires: '',
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        session: ctx.session ?? devSession,
+      } as typeof ctx & {
+        session: { user: { id: string; name: string; email: string }; expires: string }
+      },
+    })
+  }
+
   if (!ctx.session || !ctx.session.user) {
     throw new TRPCError({ code: 'UNAUTHORIZED' })
   }
   return next({
     ctx: {
       ...ctx,
-      session: { ...ctx.session, user: ctx.session.user },
+      session: ctx.session,
+    } as typeof ctx & {
+      session: NonNullable<typeof ctx.session> & {
+        user: NonNullable<NonNullable<typeof ctx.session>['user']>
+      }
     },
   })
 })

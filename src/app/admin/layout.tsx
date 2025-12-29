@@ -17,6 +17,11 @@ import {
   DollarSign,
   Cloud,
   ChevronDown,
+  Link2,
+  Hash,
+  MessageSquare,
+  AtSign,
+  TrendingUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -54,6 +59,11 @@ const navItems: NavItem[] = [
       { title: 'Comparison', href: '/admin/insights/comparison', icon: GitCompare },
       { title: 'Ad Performance', href: '/admin/insights/ads', icon: DollarSign },
       { title: 'Weather', href: '/admin/insights/weather', icon: Cloud },
+      { title: 'Attribution', href: '/admin/insights/attribution', icon: Link2 },
+      { title: 'Hashtags', href: '/admin/insights/hashtags', icon: Hash },
+      { title: 'Sentiment', href: '/admin/insights/sentiment', icon: MessageSquare },
+      { title: 'Mentions', href: '/admin/insights/mentions', icon: AtSign },
+      { title: 'Correlations', href: '/admin/insights/correlations', icon: TrendingUp },
     ],
   },
   {
