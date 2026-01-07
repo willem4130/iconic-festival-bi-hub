@@ -161,43 +161,59 @@ export async function GET(request: NextRequest) {
 
     // Step 5: Store MetaConnection in database
     // Use upsert to handle reconnection scenarios
-    console.log('OAuth callback - step 5: storing MetaConnection for user:', userId)
-    const metaConnection = await db.metaConnection.upsert({
-      where: {
-        userId_metaUserId: {
-          userId,
-          metaUserId: userInfo.id,
-        },
-      },
-      create: {
-        userId,
-        metaUserId: userInfo.id,
-        metaUserName: userInfo.name,
-        accessToken: longLivedToken.access_token,
-        tokenExpiresAt,
-        scopes: [
-          'pages_show_list',
-          'pages_read_engagement',
-          'pages_read_user_content',
-          'read_insights',
-          'instagram_basic',
-          'instagram_manage_insights',
-          'business_management',
-        ],
-        status: 'ACTIVE',
-      },
-      update: {
-        metaUserName: userInfo.name,
-        accessToken: longLivedToken.access_token,
-        tokenExpiresAt,
-        tokenRefreshedAt: new Date(),
-        status: 'ACTIVE',
-        lastErrorMessage: null,
-        lastErrorAt: null,
-      },
+    console.log('OAuth callback - step 5: storing MetaConnection')
+    console.log('OAuth callback - step 5 params:', {
+      userId,
+      metaUserId: userInfo.id,
+      metaUserName: userInfo.name,
+      tokenExpiresAt: tokenExpiresAt.toISOString(),
     })
 
-    console.log('OAuth callback - step 5 complete: connection saved with id:', metaConnection.id)
+    let metaConnection
+    try {
+      metaConnection = await db.metaConnection.upsert({
+        where: {
+          userId_metaUserId: {
+            userId,
+            metaUserId: userInfo.id,
+          },
+        },
+        create: {
+          userId,
+          metaUserId: userInfo.id,
+          metaUserName: userInfo.name,
+          accessToken: longLivedToken.access_token,
+          tokenExpiresAt,
+          scopes: [
+            'pages_show_list',
+            'pages_read_engagement',
+            'pages_read_user_content',
+            'read_insights',
+            'instagram_basic',
+            'instagram_manage_insights',
+            'business_management',
+          ],
+          status: 'ACTIVE',
+        },
+        update: {
+          metaUserName: userInfo.name,
+          accessToken: longLivedToken.access_token,
+          tokenExpiresAt,
+          tokenRefreshedAt: new Date(),
+          status: 'ACTIVE',
+          lastErrorMessage: null,
+          lastErrorAt: null,
+        },
+      })
+      console.log('OAuth callback - step 5 complete: connection saved with id:', metaConnection.id)
+    } catch (dbError) {
+      console.error('OAuth callback - step 5 FAILED - database error:', dbError)
+      console.error('OAuth callback - step 5 error details:', {
+        name: dbError instanceof Error ? dbError.name : 'Unknown',
+        message: dbError instanceof Error ? dbError.message : String(dbError),
+      })
+      throw dbError // Re-throw to be caught by outer catch
+    }
 
     // Store discovered accounts in session/temp storage for selection step
     console.log('OAuth callback - step 6: storing discovered accounts in cookie')
