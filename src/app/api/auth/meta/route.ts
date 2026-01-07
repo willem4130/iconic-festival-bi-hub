@@ -5,21 +5,20 @@
  *
  * Initiates the Meta OAuth flow by:
  * 1. Generating a CSRF state token
- * 2. Storing it in a secure cookie
+ * 2. Storing it in the database (more reliable than cookies for cross-site redirects)
  * 3. Redirecting to Facebook OAuth dialog
  */
 
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
 import {
   buildAuthorizationUrl,
   createOAuthConfigFromEnv,
   generateStateToken,
   META_OAUTH_SCOPES,
 } from '@/lib/meta-api/oauth'
+import { db } from '@/server/db'
 
-const STATE_COOKIE_NAME = 'meta_oauth_state'
-const STATE_COOKIE_MAX_AGE = 60 * 10 // 10 minutes
+const STATE_EXPIRY_MINUTES = 10 // State token valid for 10 minutes
 
 export async function GET() {
   // Get OAuth configuration
@@ -38,16 +37,26 @@ export async function GET() {
   // Generate CSRF state token
   const state = generateStateToken()
 
-  // Store state in cookie for verification in callback
-  // Using sameSite: 'none' with secure: true to ensure cookie is sent on cross-site redirect
-  const cookieStore = await cookies()
-  cookieStore.set(STATE_COOKIE_NAME, state, {
-    httpOnly: true,
-    secure: true, // Required for sameSite: 'none'
-    sameSite: 'none', // Required for cross-site OAuth redirects
-    maxAge: STATE_COOKIE_MAX_AGE,
-    path: '/',
+  // Store state in database (more reliable than cookies for cross-site OAuth)
+  // This avoids issues with sameSite cookie restrictions and browser privacy settings
+  const expiresAt = new Date(Date.now() + STATE_EXPIRY_MINUTES * 60 * 1000)
+  await db.oAuthState.create({
+    data: {
+      state,
+      expiresAt,
+    },
   })
+
+  // Clean up expired states (fire and forget)
+  db.oAuthState
+    .deleteMany({
+      where: {
+        expiresAt: { lt: new Date() },
+      },
+    })
+    .catch(() => {
+      // Ignore cleanup errors
+    })
 
   // Build authorization URL
   const authUrl = buildAuthorizationUrl(config, state, [...META_OAUTH_SCOPES])

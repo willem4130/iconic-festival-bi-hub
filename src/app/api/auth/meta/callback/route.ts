@@ -4,7 +4,7 @@
  * GET /api/auth/meta/callback
  *
  * Handles the OAuth callback from Facebook:
- * 1. Verifies CSRF state token
+ * 1. Verifies CSRF state token (from database, not cookies)
  * 2. Exchanges code for access token
  * 3. Exchanges for long-lived token (60 days)
  * 4. Gets user info and discovers pages/Instagram accounts
@@ -23,8 +23,6 @@ import {
   getMetaUserInfo,
 } from '@/lib/meta-api/oauth'
 import { discoverAllAccounts } from '@/lib/meta-api/account-discovery'
-
-const STATE_COOKIE_NAME = 'meta_oauth_state'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -54,30 +52,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(errorUrl)
   }
 
-  // Verify CSRF state token
-  const cookieStore = await cookies()
-  const storedState = cookieStore.get(STATE_COOKIE_NAME)?.value
+  // Verify CSRF state token from database (more reliable than cookies)
+  const storedState = await db.oAuthState.findUnique({
+    where: { state },
+  })
 
   // Log for debugging
   console.log('OAuth callback - state validation:', {
     receivedState: state?.substring(0, 10) + '...',
-    storedState: storedState?.substring(0, 10) + '...',
-    match: storedState === state,
+    foundInDb: !!storedState,
+    expired: storedState ? storedState.expiresAt < new Date() : null,
   })
 
-  if (!storedState || storedState !== state) {
-    console.error('State mismatch:', {
-      hasStoredState: !!storedState,
-      statesMatch: storedState === state,
-    })
+  if (!storedState) {
+    console.error('State not found in database:', { state: state?.substring(0, 10) + '...' })
     const errorUrl = new URL(settingsUrl)
     errorUrl.searchParams.set('error', 'invalid_state')
     errorUrl.searchParams.set('message', 'Invalid state token - please try again')
     return NextResponse.redirect(errorUrl)
   }
 
-  // Clear state cookie
-  cookieStore.delete(STATE_COOKIE_NAME)
+  if (storedState.expiresAt < new Date()) {
+    console.error('State token expired:', { expiresAt: storedState.expiresAt })
+    // Delete expired state
+    await db.oAuthState.delete({ where: { id: storedState.id } }).catch(() => {})
+    const errorUrl = new URL(settingsUrl)
+    errorUrl.searchParams.set('error', 'state_expired')
+    errorUrl.searchParams.set('message', 'OAuth session expired - please try again')
+    return NextResponse.redirect(errorUrl)
+  }
+
+  // Delete the state token (single use)
+  await db.oAuthState.delete({ where: { id: storedState.id } }).catch(() => {})
 
   // Get authenticated user session (or use dev-user if NextAuth not configured)
   const session = await getServerAuthSession()
@@ -98,6 +104,9 @@ export async function GET(request: NextRequest) {
 
   try {
     console.log('OAuth callback - starting token exchange')
+
+    // Get cookie store for storing discovered accounts later
+    const cookieStore = await cookies()
 
     // Step 1: Exchange code for short-lived token
     const tokenResponse = await exchangeCodeForToken(config, code)

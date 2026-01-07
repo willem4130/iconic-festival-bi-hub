@@ -631,6 +631,17 @@ enum MetaConnectionStatus {
 // META OAUTH CONNECTION
 // ==========================================
 
+// OAuthState: Stores CSRF state tokens for OAuth flows (database-based, not cookies)
+model OAuthState {
+  id        String   @id @default(cuid())
+  state     String   @unique                // The state token
+  expiresAt DateTime                        // When this state expires
+  createdAt DateTime @default(now())
+
+  @@index([state])
+  @@index([expiresAt])
+}
+
 // MetaConnection: OAuth connection to Meta (Facebook/Instagram)
 model MetaConnection {
   id                    String               @id @default(cuid())
