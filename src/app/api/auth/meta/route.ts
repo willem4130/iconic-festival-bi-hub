@@ -39,11 +39,12 @@ export async function GET() {
   const state = generateStateToken()
 
   // Store state in cookie for verification in callback
+  // Using sameSite: 'none' with secure: true to ensure cookie is sent on cross-site redirect
   const cookieStore = await cookies()
   cookieStore.set(STATE_COOKIE_NAME, state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: true, // Required for sameSite: 'none'
+    sameSite: 'none', // Required for cross-site OAuth redirects
     maxAge: STATE_COOKIE_MAX_AGE,
     path: '/',
   })
