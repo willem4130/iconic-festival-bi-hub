@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod'
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc'
+import { createTRPCRouter, publicProcedure } from '@/server/api/trpc'
 import { TRPCError } from '@trpc/server'
 import {
   createMetaClientFromEnv,
@@ -40,7 +40,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get API connection status
    */
-  getConnectionStatus: protectedProcedure.query(async () => {
+  getConnectionStatus: publicProcedure.query(async () => {
     const client = createMetaClientFromEnv()
 
     if (!client) {
@@ -81,7 +81,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get Facebook Page info
    */
-  getPageInfo: protectedProcedure.query(async () => {
+  getPageInfo: publicProcedure.query(async () => {
     const client = createMetaClientFromEnv()
     if (!client) {
       throw new TRPCError({
@@ -104,7 +104,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get Instagram account info
    */
-  getInstagramInfo: protectedProcedure.query(async () => {
+  getInstagramInfo: publicProcedure.query(async () => {
     const client = createMetaClientFromEnv()
     if (!client) {
       throw new TRPCError({
@@ -127,7 +127,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Sync Facebook Page insights to database
    */
-  syncPageInsights: protectedProcedure.input(syncOptionsSchema).mutation(async ({ ctx, input }) => {
+  syncPageInsights: publicProcedure.input(syncOptionsSchema).mutation(async ({ ctx, input }) => {
     const client = createMetaClientFromEnv()
     if (!client) {
       throw new TRPCError({
@@ -202,7 +202,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Sync Instagram insights to database
    */
-  syncInstagramInsights: protectedProcedure
+  syncInstagramInsights: publicProcedure
     .input(syncOptionsSchema)
     .mutation(async ({ ctx, input }) => {
       const client = createMetaClientFromEnv()
@@ -279,7 +279,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Sync content (posts, media) to database
    */
-  syncContent: protectedProcedure
+  syncContent: publicProcedure
     .input(
       z.object({
         platform: z.enum(['FACEBOOK', 'INSTAGRAM']),
@@ -316,7 +316,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get stored insights for a date range
    */
-  getStoredInsights: protectedProcedure
+  getStoredInsights: publicProcedure
     .input(
       z.object({
         platform: z.enum(['FACEBOOK', 'INSTAGRAM']).optional(),
@@ -360,7 +360,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get stored content with insights
    */
-  getStoredContent: protectedProcedure
+  getStoredContent: publicProcedure
     .input(
       z.object({
         platform: z.enum(['FACEBOOK', 'INSTAGRAM']).optional(),
@@ -417,7 +417,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get content for calendar view
    */
-  getContentCalendar: protectedProcedure
+  getContentCalendar: publicProcedure
     .input(
       z.object({
         year: z.number().min(2020).max(2030),
@@ -523,7 +523,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get platform comparison data (FB vs IG side-by-side)
    */
-  getPlatformComparison: protectedProcedure
+  getPlatformComparison: publicProcedure
     .input(
       z.object({
         days: z.number().min(1).max(90).default(30),
@@ -684,7 +684,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get ad campaigns overview
    */
-  getAdCampaigns: protectedProcedure
+  getAdCampaigns: publicProcedure
     .input(
       z.object({
         status: z.enum(['ACTIVE', 'PAUSED', 'DELETED', 'ARCHIVED']).optional(),
@@ -719,7 +719,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get weather correlation data
    */
-  getWeatherCorrelation: protectedProcedure
+  getWeatherCorrelation: publicProcedure
     .input(
       z.object({
         days: z.number().min(7).max(365).default(90),
@@ -896,7 +896,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Get ad performance dashboard data
    */
-  getAdPerformance: protectedProcedure
+  getAdPerformance: publicProcedure
     .input(
       z.object({
         days: z.number().min(1).max(90).default(30),
@@ -1081,7 +1081,7 @@ export const metaInsightsRouter = createTRPCRouter({
   /**
    * Sync ad campaigns from Meta
    */
-  syncAdCampaigns: protectedProcedure.mutation(async ({ ctx }) => {
+  syncAdCampaigns: publicProcedure.mutation(async ({ ctx }) => {
     const client = createMetaClientFromEnv()
     if (!client || !client.adAccountId) {
       throw new TRPCError({
