@@ -117,14 +117,18 @@ export async function GET(request: NextRequest) {
     // Step 2: Exchange for long-lived token (60 days)
     console.log('OAuth callback - step 2: exchanging for long-lived token')
     const longLivedToken = await exchangeForLongLivedToken(config, tokenResponse.access_token)
+    // Default to 60 days if expires_in is not provided (Meta sometimes omits this)
+    const expiresInSeconds = longLivedToken.expires_in ?? 60 * 24 * 60 * 60 // 60 days default
     console.log(
       'OAuth callback - step 2 complete: got long-lived token, expires in',
+      expiresInSeconds,
+      'seconds (raw:',
       longLivedToken.expires_in,
-      'seconds'
+      ')'
     )
 
     // Calculate expiration date (expires_in is in seconds)
-    const tokenExpiresAt = new Date(Date.now() + longLivedToken.expires_in * 1000)
+    const tokenExpiresAt = new Date(Date.now() + expiresInSeconds * 1000)
 
     // Step 3: Get Meta user info
     console.log('OAuth callback - step 3: getting user info')
@@ -133,11 +137,18 @@ export async function GET(request: NextRequest) {
 
     // Step 4: Discover available pages and Instagram accounts
     console.log('OAuth callback - step 4: discovering accounts')
-    const discoveredAccounts = await discoverAllAccounts(longLivedToken.access_token)
-    console.log('OAuth callback - step 4 complete:', {
-      pages: discoveredAccounts.facebookPages.length,
-      instagram: discoveredAccounts.instagramAccounts.length,
-    })
+    let discoveredAccounts
+    try {
+      discoveredAccounts = await discoverAllAccounts(longLivedToken.access_token)
+      console.log('OAuth callback - step 4 complete:', {
+        pages: discoveredAccounts.facebookPages.length,
+        instagram: discoveredAccounts.instagramAccounts.length,
+      })
+    } catch (discoveryError) {
+      console.error('OAuth callback - step 4 FAILED:', discoveryError)
+      // Continue with empty accounts - user can refresh later
+      discoveredAccounts = { facebookPages: [], instagramAccounts: [] }
+    }
 
     // Step 5: Store MetaConnection in database
     // Use upsert to handle reconnection scenarios
