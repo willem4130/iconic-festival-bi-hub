@@ -103,35 +103,45 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('OAuth callback - starting token exchange')
+    console.log('OAuth callback - starting token exchange for user:', userId)
+    console.log('OAuth callback - redirect_uri:', config.redirectUri)
 
     // Get cookie store for storing discovered accounts later
     const cookieStore = await cookies()
 
     // Step 1: Exchange code for short-lived token
+    console.log('OAuth callback - step 1: exchanging code for token')
     const tokenResponse = await exchangeCodeForToken(config, code)
-    console.log('OAuth callback - got short-lived token')
+    console.log('OAuth callback - step 1 complete: got short-lived token')
 
     // Step 2: Exchange for long-lived token (60 days)
+    console.log('OAuth callback - step 2: exchanging for long-lived token')
     const longLivedToken = await exchangeForLongLivedToken(config, tokenResponse.access_token)
+    console.log(
+      'OAuth callback - step 2 complete: got long-lived token, expires in',
+      longLivedToken.expires_in,
+      'seconds'
+    )
 
     // Calculate expiration date (expires_in is in seconds)
     const tokenExpiresAt = new Date(Date.now() + longLivedToken.expires_in * 1000)
 
     // Step 3: Get Meta user info
+    console.log('OAuth callback - step 3: getting user info')
     const userInfo = await getMetaUserInfo(longLivedToken.access_token)
+    console.log('OAuth callback - step 3 complete: user id', userInfo.id, 'name', userInfo.name)
 
     // Step 4: Discover available pages and Instagram accounts
+    console.log('OAuth callback - step 4: discovering accounts')
     const discoveredAccounts = await discoverAllAccounts(longLivedToken.access_token)
-
-    console.log('OAuth callback - discovered accounts:', {
+    console.log('OAuth callback - step 4 complete:', {
       pages: discoveredAccounts.facebookPages.length,
       instagram: discoveredAccounts.instagramAccounts.length,
     })
 
     // Step 5: Store MetaConnection in database
     // Use upsert to handle reconnection scenarios
-    console.log('OAuth callback - storing connection for user:', userId)
+    console.log('OAuth callback - step 5: storing MetaConnection for user:', userId)
     const metaConnection = await db.metaConnection.upsert({
       where: {
         userId_metaUserId: {
@@ -167,9 +177,10 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    console.log('OAuth callback - connection saved:', metaConnection.id)
+    console.log('OAuth callback - step 5 complete: connection saved with id:', metaConnection.id)
 
     // Store discovered accounts in session/temp storage for selection step
+    console.log('OAuth callback - step 6: storing discovered accounts in cookie')
     // Using cookies with short expiration for simplicity
     const accountsData = JSON.stringify({
       connectionId: metaConnection.id,
@@ -208,17 +219,22 @@ export async function GET(request: NextRequest) {
     successUrl.searchParams.set('meta_connected', 'true')
     successUrl.searchParams.set('show_selector', 'true')
 
+    console.log('OAuth callback - SUCCESS! Redirecting to:', successUrl.toString())
     return NextResponse.redirect(successUrl)
   } catch (error) {
-    console.error('Meta OAuth callback error:', error)
+    console.error('Meta OAuth callback FAILED:', error)
+    console.error('Error details:', {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
 
+    const errorMessage = error instanceof Error ? error.message : 'Failed to complete OAuth flow'
     const errorUrl = new URL(settingsUrl)
     errorUrl.searchParams.set('error', 'oauth_failed')
-    errorUrl.searchParams.set(
-      'message',
-      error instanceof Error ? error.message : 'Failed to complete OAuth flow'
-    )
+    errorUrl.searchParams.set('message', errorMessage)
 
+    console.log('OAuth callback - redirecting to error URL:', errorUrl.toString())
     return NextResponse.redirect(errorUrl)
   }
 }
