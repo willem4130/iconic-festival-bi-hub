@@ -22,7 +22,7 @@ import {
   exchangeForLongLivedToken,
   getMetaUserInfo,
 } from '@/lib/meta-api/oauth'
-// import { discoverAllAccounts } from '@/lib/meta-api/account-discovery' // Temporarily disabled for debugging
+import { discoverAllAccounts } from '@/lib/meta-api/account-discovery'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -136,27 +136,18 @@ export async function GET(request: NextRequest) {
     console.log('OAuth callback - step 3 complete: user id', userInfo.id, 'name', userInfo.name)
 
     // Step 4: Discover available pages and Instagram accounts
-    // TEMPORARILY SKIPPED to debug - will just save connection first
-    console.log('OAuth callback - step 4: SKIPPING account discovery for debugging')
-    const discoveredAccounts = {
-      facebookPages: [] as Array<{
-        id: string
-        name: string
-        username?: string
-        category?: string
-        profilePictureUrl?: string
-        followersCount?: number
-        hasInstagram: boolean
-      }>,
-      instagramAccounts: [] as Array<{
-        id: string
-        username: string
-        name?: string
-        profilePictureUrl?: string
-        followersCount?: number
-        linkedFacebookPageId: string
-        linkedFacebookPageName: string
-      }>,
+    console.log('OAuth callback - step 4: discovering accounts')
+    let discoveredAccounts
+    try {
+      discoveredAccounts = await discoverAllAccounts(longLivedToken.access_token)
+      console.log('OAuth callback - step 4 complete:', {
+        pages: discoveredAccounts.facebookPages.length,
+        instagram: discoveredAccounts.instagramAccounts.length,
+      })
+    } catch (discoveryError) {
+      console.error('OAuth callback - step 4 FAILED:', discoveryError)
+      // Continue with empty accounts - user can refresh later
+      discoveredAccounts = { facebookPages: [], instagramAccounts: [] }
     }
 
     // Step 5: Store MetaConnection in database
@@ -218,11 +209,26 @@ export async function GET(request: NextRequest) {
     // Store discovered accounts in session/temp storage for selection step
     console.log('OAuth callback - step 6: storing discovered accounts in cookie')
     // Using cookies with short expiration for simplicity
-    // Note: Account discovery is temporarily disabled, so this will be empty
     const accountsData = JSON.stringify({
       connectionId: metaConnection.id,
-      facebookPages: discoveredAccounts.facebookPages,
-      instagramAccounts: discoveredAccounts.instagramAccounts,
+      facebookPages: discoveredAccounts.facebookPages.map((p) => ({
+        id: p.id,
+        name: p.name,
+        username: p.username,
+        category: p.category,
+        profilePictureUrl: p.profilePictureUrl,
+        followersCount: p.followersCount,
+        hasInstagram: !!p.instagramBusinessAccount,
+      })),
+      instagramAccounts: discoveredAccounts.instagramAccounts.map((a) => ({
+        id: a.id,
+        username: a.username,
+        name: a.name,
+        profilePictureUrl: a.profilePictureUrl,
+        followersCount: a.followersCount,
+        linkedFacebookPageId: a.linkedFacebookPageId,
+        linkedFacebookPageName: a.linkedFacebookPageName,
+      })),
     })
 
     // Store in cookie (size limit ~4KB, should be fine for most cases)
