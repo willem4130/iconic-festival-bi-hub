@@ -58,10 +58,21 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies()
   const storedState = cookieStore.get(STATE_COOKIE_NAME)?.value
 
+  // Log for debugging
+  console.log('OAuth callback - state validation:', {
+    receivedState: state?.substring(0, 10) + '...',
+    storedState: storedState?.substring(0, 10) + '...',
+    match: storedState === state,
+  })
+
   if (!storedState || storedState !== state) {
+    console.error('State mismatch:', {
+      hasStoredState: !!storedState,
+      statesMatch: storedState === state,
+    })
     const errorUrl = new URL(settingsUrl)
     errorUrl.searchParams.set('error', 'invalid_state')
-    errorUrl.searchParams.set('message', 'Invalid state token - possible CSRF attack')
+    errorUrl.searchParams.set('message', 'Invalid state token - please try again')
     return NextResponse.redirect(errorUrl)
   }
 
@@ -86,8 +97,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    console.log('OAuth callback - starting token exchange')
+
     // Step 1: Exchange code for short-lived token
     const tokenResponse = await exchangeCodeForToken(config, code)
+    console.log('OAuth callback - got short-lived token')
 
     // Step 2: Exchange for long-lived token (60 days)
     const longLivedToken = await exchangeForLongLivedToken(config, tokenResponse.access_token)
@@ -101,8 +115,14 @@ export async function GET(request: NextRequest) {
     // Step 4: Discover available pages and Instagram accounts
     const discoveredAccounts = await discoverAllAccounts(longLivedToken.access_token)
 
+    console.log('OAuth callback - discovered accounts:', {
+      pages: discoveredAccounts.facebookPages.length,
+      instagram: discoveredAccounts.instagramAccounts.length,
+    })
+
     // Step 5: Store MetaConnection in database
     // Use upsert to handle reconnection scenarios
+    console.log('OAuth callback - storing connection for user:', userId)
     const metaConnection = await db.metaConnection.upsert({
       where: {
         userId_metaUserId: {
@@ -137,6 +157,8 @@ export async function GET(request: NextRequest) {
         lastErrorAt: null,
       },
     })
+
+    console.log('OAuth callback - connection saved:', metaConnection.id)
 
     // Store discovered accounts in session/temp storage for selection step
     // Using cookies with short expiration for simplicity
