@@ -39,6 +39,9 @@ model User {
   subsetsCreated              Subset[]               @relation("SubsetCreatedBy")
   transformationPipelinesCreated TransformationPipeline[] @relation("PipelineCreatedBy")
 
+  // Meta OAuth connections
+  metaConnections             MetaConnection[]
+
   @@index([email])
   @@index([role])
 }
@@ -616,6 +619,55 @@ enum AccountType {
   CREATOR        // Instagram Creator Account
 }
 
+enum MetaConnectionStatus {
+  ACTIVE             // Connection is active and working
+  TOKEN_EXPIRED      // Token has expired, needs refresh
+  PERMISSIONS_REVOKED // User revoked permissions
+  DISCONNECTED       // User disconnected manually
+  ERROR              // Connection error
+}
+
+// ==========================================
+// META OAUTH CONNECTION
+// ==========================================
+
+// MetaConnection: OAuth connection to Meta (Facebook/Instagram)
+model MetaConnection {
+  id                    String               @id @default(cuid())
+
+  // User who authorized this connection
+  userId                String
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Meta user info
+  metaUserId            String               // Facebook user ID
+  metaUserName          String?              // Facebook user name
+
+  // Long-lived user access token (encrypted in production)
+  accessToken           String
+  tokenExpiresAt        DateTime
+  tokenRefreshedAt      DateTime             @default(now())
+
+  // Scopes granted
+  scopes                String[]
+
+  // Connection status
+  status                MetaConnectionStatus @default(ACTIVE)
+  lastErrorMessage      String?
+  lastErrorAt           DateTime?
+
+  // Relations to connected accounts
+  connectedAccounts     DimAccount[]
+
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@unique([userId, metaUserId])
+  @@index([userId])
+  @@index([status])
+  @@index([tokenExpiresAt])
+}
+
 // dim_platform: Platform dimension (Facebook, Instagram)
 model DimPlatform {
   id              String    @id @default(cuid())
@@ -639,6 +691,10 @@ model DimAccount {
   platformId            String
   platform              DimPlatform @relation(fields: [platformId], references: [id], onDelete: Cascade)
 
+  // Meta OAuth connection reference
+  metaConnectionId      String?
+  metaConnection        MetaConnection? @relation(fields: [metaConnectionId], references: [id], onDelete: SetNull)
+
   // Account details
   accountType           AccountType
   name                  String      // Page/Account name
@@ -648,9 +704,13 @@ model DimAccount {
   // For Instagram: linked Facebook Page
   linkedFacebookPageId  String?
 
-  // Access token management
+  // Access token management (legacy - for env var based tokens)
   accessToken           String?     // Encrypted in production
   tokenExpiresAt        DateTime?
+
+  // Page-specific access token (OAuth - never expires when derived from long-lived user token)
+  pageAccessToken       String?     // Page-specific token from OAuth
+  pageTokenObtainedAt   DateTime?
 
   // Sync status
   lastSyncAt            DateTime?
@@ -667,6 +727,7 @@ model DimAccount {
 
   @@unique([platformId, externalId])
   @@index([platformId])
+  @@index([metaConnectionId])
   @@index([accountType])
   @@index([isActive])
 }

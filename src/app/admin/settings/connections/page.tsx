@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { api } from '@/trpc/react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ConnectFacebookButton, AccountSelector, ConnectedAccounts } from '@/components/meta'
 import {
   Loader2,
   CheckCircle2,
@@ -18,23 +20,57 @@ import {
   Instagram,
   Megaphone,
   ExternalLink,
-  Copy,
   Shield,
 } from 'lucide-react'
 
 export default function ConnectionsPage() {
   const { toast } = useToast()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [syncingPlatform, setSyncingPlatform] = useState<string | null>(null)
+  const [showAccountSelector, setShowAccountSelector] = useState(false)
 
-  // API queries
-  const connectionStatus = api.metaInsights.getConnectionStatus.useQuery(undefined, {
-    refetchInterval: 60000, // Refresh every minute
+  const utils = api.useUtils()
+
+  // Check for OAuth callback status
+  useEffect(() => {
+    const error = searchParams.get('error')
+    const errorMessage = searchParams.get('message')
+    const metaConnected = searchParams.get('meta_connected')
+    const showSelector = searchParams.get('show_selector')
+
+    if (error) {
+      toast({
+        title: 'Connection Error',
+        description: errorMessage ?? 'Failed to connect to Meta',
+        variant: 'destructive',
+      })
+      // Clear URL params
+      router.replace('/admin/settings/connections')
+    }
+
+    if (metaConnected === 'true' && showSelector === 'true') {
+      setShowAccountSelector(true)
+      // Clear URL params but keep showing selector
+      router.replace('/admin/settings/connections')
+    }
+  }, [searchParams, toast, router])
+
+  // OAuth connection status
+  const oauthStatus = api.metaAuth.getConnectionStatus.useQuery()
+
+  // Discovered accounts (from OAuth callback cookie)
+  const discoveredAccounts = api.metaAuth.getDiscoveredAccounts.useQuery(undefined, {
+    enabled: showAccountSelector,
   })
+
+  // Legacy env-based connection status
+  const legacyStatus = api.metaInsights.getConnectionStatus.useQuery()
   const pageInfo = api.metaInsights.getPageInfo.useQuery(undefined, {
-    enabled: connectionStatus.data?.connected && !!connectionStatus.data?.pageId,
+    enabled: legacyStatus.data?.connected && !!legacyStatus.data?.pageId,
   })
   const instagramInfo = api.metaInsights.getInstagramInfo.useQuery(undefined, {
-    enabled: connectionStatus.data?.connected && !!connectionStatus.data?.instagramAccountId,
+    enabled: legacyStatus.data?.connected && !!legacyStatus.data?.instagramAccountId,
   })
 
   // Sync mutations
@@ -83,15 +119,57 @@ export default function ConnectionsPage() {
     }
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
+  const handleAccountSelectorComplete = () => {
+    setShowAccountSelector(false)
+    utils.metaAuth.getConnectionStatus.invalidate()
     toast({
-      title: 'Copied',
-      description: 'Copied to clipboard',
+      title: 'Setup complete',
+      description: 'Your Meta accounts are now connected and ready to sync',
     })
   }
 
-  const isLoading = connectionStatus.isLoading
+  // Refresh discovered accounts mutation
+  const refreshDiscoveredAccounts = api.metaAuth.refreshDiscoveredAccounts.useMutation({
+    onSuccess: () => {
+      setShowAccountSelector(true)
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to refresh accounts',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const handleAddMoreAccounts = () => {
+    refreshDiscoveredAccounts.mutate()
+  }
+
+  const isLoading = oauthStatus.isLoading || legacyStatus.isLoading
+  const hasOAuthConnection = oauthStatus.data?.connected
+  const hasLegacyConnection = legacyStatus.data?.connected && !hasOAuthConnection
+
+  // Show account selector if we just completed OAuth
+  if (showAccountSelector && discoveredAccounts.data?.connectionId) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Connect Your Accounts</h1>
+          <p className="text-gray-500">
+            Select the Facebook Pages and Instagram accounts you want to track
+          </p>
+        </div>
+        <AccountSelector
+          connectionId={discoveredAccounts.data.connectionId}
+          facebookPages={discoveredAccounts.data.facebookPages}
+          instagramAccounts={discoveredAccounts.data.instagramAccounts}
+          onComplete={handleAccountSelectorComplete}
+          onCancel={() => setShowAccountSelector(false)}
+        />
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -117,11 +195,82 @@ export default function ConnectionsPage() {
     )
   }
 
-  const status = connectionStatus.data
-  const isConnected = status?.connected
-  const tokenExpiring = status?.tokenExpiring
-  const daysRemaining = status?.tokenDaysRemaining
+  // OAuth-connected state
+  if (hasOAuthConnection) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">API Connections</h1>
+            <p className="text-gray-500">Manage your social media API connections</p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              oauthStatus.refetch()
+              legacyStatus.refetch()
+            }}
+            disabled={oauthStatus.isRefetching}
+          >
+            {oauthStatus.isRefetching ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh Status
+          </Button>
+        </div>
 
+        <ConnectedAccounts onAddMore={handleAddMoreAccounts} />
+
+        {/* Sync Section */}
+        {oauthStatus.data?.accounts && oauthStatus.data.accounts.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Sync Data</CardTitle>
+              <CardDescription>
+                Manually sync insights data from your connected accounts
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                {oauthStatus.data.accounts.some((a) => a.platform === 'FACEBOOK') && (
+                  <Button
+                    onClick={() => handleSync('facebook')}
+                    disabled={syncingPlatform === 'facebook'}
+                    variant="outline"
+                  >
+                    {syncingPlatform === 'facebook' ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Facebook className="mr-2 h-4 w-4 text-blue-600" />
+                    )}
+                    Sync Facebook
+                  </Button>
+                )}
+                {oauthStatus.data.accounts.some((a) => a.platform === 'INSTAGRAM') && (
+                  <Button
+                    onClick={() => handleSync('instagram')}
+                    disabled={syncingPlatform === 'instagram'}
+                    variant="outline"
+                  >
+                    {syncingPlatform === 'instagram' ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Instagram className="mr-2 h-4 w-4 text-pink-600" />
+                    )}
+                    Sync Instagram
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
+
+  // Legacy env-based connection or not connected state
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -131,10 +280,10 @@ export default function ConnectionsPage() {
         </div>
         <Button
           variant="outline"
-          onClick={() => connectionStatus.refetch()}
-          disabled={connectionStatus.isRefetching}
+          onClick={() => legacyStatus.refetch()}
+          disabled={legacyStatus.isRefetching}
         >
-          {connectionStatus.isRefetching ? (
+          {legacyStatus.isRefetching ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -143,28 +292,19 @@ export default function ConnectionsPage() {
         </Button>
       </div>
 
-      {/* Token Expiration Warning */}
-      {isConnected && tokenExpiring && (
+      {/* Token Expiration Warning (legacy) */}
+      {hasLegacyConnection && legacyStatus.data?.tokenExpiring && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Token Expiring Soon</AlertTitle>
           <AlertDescription>
-            Your Meta API access token expires in {daysRemaining} days. Please refresh your token to
-            avoid service interruption.
-            <Button variant="link" className="h-auto p-0 pl-1" asChild>
-              <a
-                href="https://developers.facebook.com/tools/explorer/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Get new token <ExternalLink className="ml-1 h-3 w-3" />
-              </a>
-            </Button>
+            Your Meta API access token expires in {legacyStatus.data.tokenDaysRemaining} days.
+            Consider switching to OAuth for automatic token management.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Connection Status Overview */}
+      {/* Main Connection Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -176,137 +316,83 @@ export default function ConnectionsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4">
-            {isConnected ? (
-              <>
+          {hasLegacyConnection ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
                   <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-green-600 dark:text-green-400">Connected</p>
-                  <p className="text-sm text-gray-500">
-                    {daysRemaining !== null && daysRemaining !== undefined
-                      ? `Token valid for ${daysRemaining} days`
-                      : 'Token status unknown'}
+                  <p className="font-semibold text-green-600 dark:text-green-400">
+                    Connected (Legacy)
                   </p>
+                  <p className="text-sm text-gray-500">Using environment variable configuration</p>
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900">
-                  <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Upgrade Available</AlertTitle>
+                <AlertDescription>
+                  Switch to OAuth for automatic token refresh and easier account management.
+                  <div className="mt-3">
+                    <ConnectFacebookButton variant="outline" size="sm" />
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                  <XCircle className="h-6 w-6 text-gray-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-red-600 dark:text-red-400">Not Connected</p>
+                  <p className="font-semibold text-gray-600 dark:text-gray-400">Not Connected</p>
                   <p className="text-sm text-gray-500">
-                    {status?.error ?? 'Configure environment variables'}
+                    Connect your Meta accounts to start tracking insights
                   </p>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+
+              <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed p-8">
+                <div className="flex gap-4">
+                  <Facebook className="h-12 w-12 text-blue-600" />
+                  <Instagram className="h-12 w-12 text-pink-600" />
+                </div>
+                <h3 className="text-lg font-medium">Connect your Meta accounts</h3>
+                <p className="max-w-md text-center text-sm text-gray-500">
+                  Link your Facebook Pages and Instagram Business accounts to track engagement,
+                  reach, followers, and content performance.
+                </p>
+                <ConnectFacebookButton size="lg" />
+              </div>
+
+              {/* Required Permissions Info */}
+              <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                <h4 className="mb-2 font-medium">Required Permissions</h4>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    'pages_show_list',
+                    'pages_read_engagement',
+                    'pages_read_user_content',
+                    'read_insights',
+                    'instagram_basic',
+                    'instagram_manage_insights',
+                    'business_management',
+                  ].map((perm) => (
+                    <Badge key={perm} variant="secondary">
+                      {perm}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Setup Instructions (shown when not connected) */}
-      {!isConnected && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Instructions</CardTitle>
-            <CardDescription>Follow these steps to connect your Meta accounts</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-800">
-              <h4 className="mb-2 font-medium">Required Environment Variables</h4>
-              <div className="space-y-2 font-mono text-sm">
-                {[
-                  { key: 'META_APP_ID', desc: 'Your Meta App ID' },
-                  { key: 'META_APP_SECRET', desc: 'Your Meta App Secret' },
-                  { key: 'META_ACCESS_TOKEN', desc: 'Long-lived access token' },
-                  { key: 'META_PAGE_ID', desc: 'Facebook Page ID (optional)' },
-                  {
-                    key: 'META_INSTAGRAM_ACCOUNT_ID',
-                    desc: 'Instagram Business Account ID (optional)',
-                  },
-                  { key: 'META_AD_ACCOUNT_ID', desc: 'Ad Account ID (optional)' },
-                ].map((env) => (
-                  <div
-                    key={env.key}
-                    className="flex items-center justify-between rounded bg-white p-2 dark:bg-gray-700"
-                  >
-                    <div>
-                      <code className="text-blue-600 dark:text-blue-400">{env.key}</code>
-                      <span className="ml-2 text-gray-500">- {env.desc}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => copyToClipboard(env.key)}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="font-medium">Quick Setup Guide</h4>
-              <ol className="list-decimal space-y-2 pl-5 text-sm text-gray-600 dark:text-gray-400">
-                <li>
-                  Go to{' '}
-                  <a
-                    href="https://developers.facebook.com/apps"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    Meta for Developers
-                  </a>{' '}
-                  and create/select your app
-                </li>
-                <li>Add the Facebook Login and Instagram Graph API products</li>
-                <li>
-                  Use the{' '}
-                  <a
-                    href="https://developers.facebook.com/tools/explorer/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    Graph API Explorer
-                  </a>{' '}
-                  to generate an access token with required permissions
-                </li>
-                <li>Exchange for a long-lived token (valid 60 days)</li>
-                <li>
-                  Copy the values to your{' '}
-                  <code className="rounded bg-gray-200 px-1 dark:bg-gray-700">.env</code> file
-                </li>
-                <li>Restart your development server</li>
-              </ol>
-            </div>
-
-            <div className="pt-2">
-              <h4 className="mb-2 font-medium">Required Permissions</h4>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  'pages_show_list',
-                  'pages_read_engagement',
-                  'pages_read_user_content',
-                  'read_insights',
-                  'instagram_basic',
-                  'instagram_manage_insights',
-                  'business_management',
-                ].map((perm) => (
-                  <Badge key={perm} variant="secondary">
-                    {perm}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Connected Accounts */}
-      {isConnected && (
+      {/* Legacy Connected Accounts (when using env vars) */}
+      {hasLegacyConnection && (
         <div className="grid gap-6 md:grid-cols-2">
           {/* Facebook Page */}
           <Card>
@@ -316,7 +402,7 @@ export default function ConnectionsPage() {
                   <Facebook className="h-5 w-5 text-blue-600" />
                   Facebook Page
                 </CardTitle>
-                {status?.pageId ? (
+                {legacyStatus.data?.pageId ? (
                   <Badge variant="default" className="bg-green-600">
                     <CheckCircle2 className="mr-1 h-3 w-3" />
                     Connected
@@ -328,7 +414,7 @@ export default function ConnectionsPage() {
               <CardDescription>Your connected Facebook Page</CardDescription>
             </CardHeader>
             <CardContent>
-              {status?.pageId ? (
+              {legacyStatus.data?.pageId ? (
                 <div className="space-y-4">
                   {pageInfo.isLoading ? (
                     <div className="space-y-2">
@@ -408,7 +494,7 @@ export default function ConnectionsPage() {
                   <Instagram className="h-5 w-5 text-pink-600" />
                   Instagram Business
                 </CardTitle>
-                {status?.instagramAccountId ? (
+                {legacyStatus.data?.instagramAccountId ? (
                   <Badge variant="default" className="bg-green-600">
                     <CheckCircle2 className="mr-1 h-3 w-3" />
                     Connected
@@ -420,7 +506,7 @@ export default function ConnectionsPage() {
               <CardDescription>Your connected Instagram Business account</CardDescription>
             </CardHeader>
             <CardContent>
-              {status?.instagramAccountId ? (
+              {legacyStatus.data?.instagramAccountId ? (
                 <div className="space-y-4">
                   {instagramInfo.isLoading ? (
                     <div className="space-y-2">
@@ -506,7 +592,7 @@ export default function ConnectionsPage() {
                   <Megaphone className="h-5 w-5 text-orange-600" />
                   Meta Ads
                 </CardTitle>
-                {status?.adAccountId ? (
+                {legacyStatus.data?.adAccountId ? (
                   <Badge variant="default" className="bg-green-600">
                     <CheckCircle2 className="mr-1 h-3 w-3" />
                     Connected
@@ -518,11 +604,11 @@ export default function ConnectionsPage() {
               <CardDescription>Your connected Meta Ad Account</CardDescription>
             </CardHeader>
             <CardContent>
-              {status?.adAccountId ? (
+              {legacyStatus.data?.adAccountId ? (
                 <div className="space-y-4">
                   <div>
                     <p className="text-sm text-gray-500">Account ID</p>
-                    <p className="font-mono">{status.adAccountId}</p>
+                    <p className="font-mono">{legacyStatus.data.adAccountId}</p>
                   </div>
                   <Button variant="outline" size="sm" asChild>
                     <a
@@ -544,61 +630,6 @@ export default function ConnectionsPage() {
                   to your environment variables
                 </p>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Token Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-purple-600" />
-                Access Token
-              </CardTitle>
-              <CardDescription>Token status and expiration info</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                {tokenExpiring ? (
-                  <AlertTriangle className="h-8 w-8 text-amber-500" />
-                ) : (
-                  <CheckCircle2 className="h-8 w-8 text-green-500" />
-                )}
-                <div>
-                  <p className="font-medium">
-                    {tokenExpiring ? 'Token Expiring Soon' : 'Token Valid'}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {daysRemaining !== null && daysRemaining !== undefined
-                      ? `${daysRemaining} days remaining`
-                      : 'Expiration unknown'}
-                  </p>
-                </div>
-              </div>
-
-              {status?.tokenExpiresAt && (
-                <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
-                  <p className="text-sm text-gray-500">Expires</p>
-                  <p className="font-medium">
-                    {new Date(status.tokenExpiresAt).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </p>
-                </div>
-              )}
-
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href="https://developers.facebook.com/tools/explorer/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Get New Token
-                </a>
-              </Button>
             </CardContent>
           </Card>
         </div>
