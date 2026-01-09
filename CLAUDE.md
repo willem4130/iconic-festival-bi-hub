@@ -1,10 +1,11 @@
 # Iconic Festival BI Hub
 
-Advanced Business Intelligence platform for tracking Facebook & Instagram performance with Apache ECharts visualizations and ML-powered engagement optimization.
+Advanced Business Intelligence platform for tracking Facebook & Instagram performance with Apache ECharts visualizations, Claude AI-powered analysis, and Weeztix ticketing integration.
 
 ## Repository
 
 **GitHub**: https://github.com/willem4130/iconic-festival-bi-hub
+**Production**: https://iconic-bi-hub.vercel.app
 
 > **CRITICAL**: This repo was created from template `willem4130/nextjs-fullstack-template`.
 > NEVER push to the template repo - only to `iconic-festival-bi-hub`.
@@ -14,38 +15,33 @@ Advanced Business Intelligence platform for tracking Facebook & Instagram perfor
 ```
 src/
 ├── app/                        # Next.js App Router
-│   ├── (auth)/                 # Authenticated routes
-│   ├── (public)/               # Public routes
-│   ├── admin/                  # Admin pages (dashboard, insights, settings)
-│   │   ├── insights/           # Analytics dashboards (ads, calendar, sentiment...)
-│   │   └── settings/connections/ # OAuth connections page
-│   └── api/                    # API routes
-│       ├── auth/meta/          # Meta OAuth endpoints
-│       ├── trpc/               # tRPC handler
-│       └── upload/             # File uploads
+│   ├── admin/insights/         # Analytics dashboards
+│   │   ├── page.tsx            # Overview dashboard
+│   │   ├── comparison/         # FB vs IG comparison
+│   │   ├── calendar/           # Content calendar
+│   │   ├── content/            # Post performance (NEW)
+│   │   ├── ai/                 # AI analysis (NEW)
+│   │   └── competitors/        # Competitor tracking (NEW)
+│   ├── admin/settings/         # Settings pages
+│   └── api/auth/meta/          # Meta OAuth endpoints
 ├── components/
-│   ├── ui/                     # 28 shadcn/ui components
+│   ├── ui/                     # shadcn/ui components
 │   ├── charts/                 # ECharts wrapper
-│   └── meta/                   # Meta OAuth components
-├── server/
-│   ├── api/routers/            # 15+ tRPC routers
-│   ├── db/                     # Prisma client
-│   └── auth.ts                 # NextAuth config
+│   ├── meta/                   # Meta OAuth components
+│   └── insights/               # Dashboard components (NEW)
+├── server/api/routers/         # tRPC routers
+│   ├── meta-auth.ts            # OAuth + sync endpoints
+│   ├── meta-insights.ts        # Stored insights queries
+│   ├── ai-analysis.ts          # Claude AI analysis (NEW)
+│   └── competitors.ts          # Competitor tracking (NEW)
 ├── lib/
-│   ├── meta-api/               # Meta Graph API (OAuth, insights, ads)
-│   ├── analytics/              # Pareto analysis
-│   ├── excel/                  # Excel parsing
-│   ├── sentiment-api/          # Sentiment analysis
-│   ├── weather-api/            # Weather data
-│   └── validation/             # Business rules
-├── hooks/                      # Custom React hooks
+│   ├── meta-api/               # Meta Graph API client
+│   ├── ai/                     # Claude AI client (NEW)
+│   ├── sentiment-api/          # AWS Comprehend
+│   └── weeztix-api/            # Weeztix integration (NEW)
 └── trpc/                       # tRPC client config
 prisma/
-└── schema.prisma               # Database schema (650+ lines)
-tests/
-├── api/                        # API tests
-├── unit/                       # Unit tests
-└── e2e/                        # Playwright E2E tests
+└── schema.prisma               # Database schema
 ```
 
 ## Tech Stack
@@ -57,6 +53,7 @@ tests/
 - **UI**: Tailwind CSS + shadcn/ui + Radix UI
 - **Charts**: Apache ECharts + Recharts
 - **Auth**: NextAuth 5 + Meta OAuth
+- **AI**: Claude API (Anthropic SDK)
 
 ## Code Quality - Zero Tolerance
 
@@ -74,59 +71,62 @@ Fix ALL errors/warnings before continuing.
 npm run db:push && npm run db:generate && npm run typecheck
 ```
 
-**Dev server:**
-
-```bash
-npm run dev
-```
-
 ## Organization Rules
 
-- API routes → `src/server/api/routers/` (one router per domain)
-- Meta API logic → `src/lib/meta-api/` (OAuth, insights, ads)
-- Business logic → `src/lib/` (pure functions, no DB access)
+- tRPC routers → `src/server/api/routers/` (one router per domain)
+- Meta API logic → `src/lib/meta-api/`
+- AI logic → `src/lib/ai/`
+- Business logic → `src/lib/` (pure functions)
 - Components → `src/components/ui/` (shadcn) or feature folders
 - Types → co-located or `src/types/`
-- Tests → `tests/` folder (unit, api, e2e)
 
-## Meta OAuth Integration (Current State)
-
-### What's Working
-
-- Meta OAuth flow (Facebook + Instagram connection)
-- OAuth callback, token storage, automatic token refresh
-- Account discovery (pages + Instagram business accounts)
-- OAuth-based sync endpoints in `metaAuth` router
-- Data syncing to `factAccountInsightsDaily` table
-- All insight pages use OAuth connection status check
+## Meta OAuth Integration
 
 ### Key Files
 
-- `src/server/api/routers/meta-auth.ts` - OAuth router with sync endpoints (`syncPageInsights`, `syncInstagramInsights`)
-- `src/server/api/routers/meta-insights.ts` - Legacy router (used for `getStoredInsights`, `getContentCalendar`, etc.)
-- `src/lib/meta-api/page-insights.ts` - Facebook metrics config
-- `src/lib/meta-api/instagram-insights.ts` - Instagram metrics config
-- `src/app/admin/settings/connections/page.tsx` - Connection management UI
-- `src/components/meta/connected-accounts.tsx` - Account display component
+- `src/server/api/routers/meta-auth.ts` - OAuth + sync (`syncPageInsights`, `syncInstagramInsights`)
+- `src/lib/meta-api/page-insights.ts` - Facebook metrics
+- `src/lib/meta-api/instagram-insights.ts` - Instagram metrics
 
-### Meta API Deprecations (Nov 2025)
+### Working Metrics (Nov 2025+)
 
-Meta deprecated several metrics that cause "invalid metric" errors:
-
-- **Deprecated**: `page_impressions`, `page_fans`, `page_fan_adds`, `page_fan_removes`
-- **Working Facebook metrics**: `page_post_engagements`, `page_impressions_unique`, `page_video_views`, `page_views_total`, `page_follows`
-- **Working Instagram metrics**: `reach`, `follower_count`
-- **Instagram caveat**: `profile_views`, `website_clicks` require `metric_type=total_value` parameter
+**Facebook**: `page_post_engagements`, `page_impressions_unique`, `page_video_views`, `page_views_total`, `page_follows`
+**Instagram**: `reach`, `impressions`, `follower_count`
 
 ### Data Storage
 
 - OAuth tokens → `MetaConnection` table
-- Page access tokens → `DimAccount.pageAccessToken`
-- Daily insights → `factAccountInsightsDaily` table with date dimensions
+- Page tokens → `DimAccount.pageAccessToken`
+- Daily insights → `FactAccountInsightsDaily`
+- Posts → `DimContent` + `FactContentInsights`
 
-## Next Steps (Backlog)
+## Current Enhancement Roadmap
 
-1. Expand metrics being synced (add more working metrics)
-2. Add automatic/scheduled sync functionality
-3. Add more data visualizations with synced data
-4. Fix 404 errors for `avatar.png` and other missing assets
+### Phase 1: Content Sync (In Progress)
+
+- [ ] Sync FB posts + IG media with engagement stats
+- [ ] Store in DimContent + FactContentInsights
+
+### Phase 2: Enhanced Dashboards
+
+- [ ] Platform toggle (FB/IG/Both)
+- [ ] Content grid with engagement
+- [ ] New Content Performance page
+
+### Phase 3: Claude AI Analysis
+
+- [ ] Pattern detection, KPI analysis
+- [ ] Recommendations engine
+- [ ] Weekly AI reports
+
+### Phase 4: Competitor Tracking
+
+- [ ] Track competitor accounts
+- [ ] AI suggestions for inspiration
+- [ ] Performance comparison
+
+### Phase 5: Weeztix Integration
+
+- [ ] Link social metrics to ticket sales
+- [ ] Attribution tracking
+- [ ] Unified data lake

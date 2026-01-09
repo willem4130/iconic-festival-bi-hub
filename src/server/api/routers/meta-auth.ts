@@ -28,8 +28,19 @@ import {
   getPageInfo,
   getPageInsightsForDays,
   getInstagramInsightsForDays,
+  getPagePosts,
+  getBatchPostInsights,
+  getInstagramMedia,
+  getBatchInstagramMediaInsights,
 } from '@/lib/meta-api'
-import type { PageInsightMetric, InstagramInsightMetric } from '@/lib/meta-api'
+import type {
+  PageInsightMetric,
+  InstagramInsightMetric,
+  MetaPost,
+  PostInsight,
+  InstagramMedia,
+  InstagramMediaInsight,
+} from '@/lib/meta-api'
 
 // ===========================================
 // Input Schemas
@@ -47,6 +58,11 @@ const disconnectAccountSchema = z.object({
 const syncOptionsSchema = z.object({
   accountId: z.string(),
   days: z.number().min(1).max(90).default(30),
+})
+
+const contentSyncSchema = z.object({
+  accountId: z.string(),
+  limit: z.number().min(1).max(100).default(25),
 })
 
 // ===========================================
@@ -730,6 +746,158 @@ export const metaAuthRouter = createTRPCRouter({
         })
       }
     }),
+
+  /**
+   * Sync Facebook Page posts with engagement metrics
+   */
+  syncPagePosts: publicProcedure.input(contentSyncSchema).mutation(async ({ ctx, input }) => {
+    const userId = ctx.session?.user?.id ?? 'dev-user'
+
+    const account = await ctx.db.dimAccount.findFirst({
+      where: {
+        id: input.accountId,
+        metaConnection: { userId, status: 'ACTIVE' },
+      },
+      include: {
+        metaConnection: true,
+        platform: true,
+      },
+    })
+
+    if (!account || !account.metaConnection || !account.pageAccessToken) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Account not found or not properly connected',
+      })
+    }
+
+    if (account.platform.platform !== 'FACEBOOK') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'This endpoint is for Facebook Pages only',
+      })
+    }
+
+    try {
+      const client = new MetaApiClient({
+        appId: process.env.META_APP_ID!,
+        appSecret: process.env.META_APP_SECRET!,
+        accessToken: account.pageAccessToken,
+        pageId: account.externalId,
+      })
+
+      // Fetch posts
+      const posts = await getPagePosts(client, { limit: input.limit })
+
+      if (posts.length === 0) {
+        return {
+          success: true,
+          accountId: account.id,
+          postsStored: 0,
+          syncedAt: new Date().toISOString(),
+        }
+      }
+
+      // Fetch insights for all posts
+      const postIds = posts.map((p) => p.id)
+      const insightsMap = await getBatchPostInsights(client, postIds)
+
+      // Store posts with insights
+      const storedCount = await storePagePostsWithInsights(ctx.db, account.id, posts, insightsMap)
+
+      return {
+        success: true,
+        accountId: account.id,
+        postsStored: storedCount,
+        syncedAt: new Date().toISOString(),
+      }
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to sync page posts',
+      })
+    }
+  }),
+
+  /**
+   * Sync Instagram media with engagement metrics
+   */
+  syncInstagramMedia: publicProcedure.input(contentSyncSchema).mutation(async ({ ctx, input }) => {
+    const userId = ctx.session?.user?.id ?? 'dev-user'
+
+    const account = await ctx.db.dimAccount.findFirst({
+      where: {
+        id: input.accountId,
+        metaConnection: { userId, status: 'ACTIVE' },
+      },
+      include: {
+        metaConnection: true,
+        platform: true,
+      },
+    })
+
+    if (!account || !account.metaConnection || !account.pageAccessToken) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: 'Account not found or not properly connected',
+      })
+    }
+
+    if (account.platform.platform !== 'INSTAGRAM') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'This endpoint is for Instagram accounts only',
+      })
+    }
+
+    try {
+      const client = new MetaApiClient({
+        appId: process.env.META_APP_ID!,
+        appSecret: process.env.META_APP_SECRET!,
+        accessToken: account.pageAccessToken,
+        instagramAccountId: account.externalId,
+      })
+
+      // Fetch media
+      const media = await getInstagramMedia(client, { limit: input.limit })
+
+      if (media.length === 0) {
+        return {
+          success: true,
+          accountId: account.id,
+          postsStored: 0,
+          syncedAt: new Date().toISOString(),
+        }
+      }
+
+      // Fetch insights for all media
+      const mediaItems = media.map((m) => ({
+        id: m.id,
+        mediaType: m.media_type as 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM',
+      }))
+      const insightsMap = await getBatchInstagramMediaInsights(client, mediaItems)
+
+      // Store media with insights
+      const storedCount = await storeInstagramMediaWithInsights(
+        ctx.db,
+        account.id,
+        media,
+        insightsMap
+      )
+
+      return {
+        success: true,
+        accountId: account.id,
+        postsStored: storedCount,
+        syncedAt: new Date().toISOString(),
+      }
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: error instanceof Error ? error.message : 'Failed to sync Instagram media',
+      })
+    }
+  }),
 })
 
 // ===========================================
@@ -982,6 +1150,242 @@ async function storeInstagramInsightsOAuth(
     })
 
     count = 1
+  }
+
+  return count
+}
+
+// ===========================================
+// Content Storage Functions
+// ===========================================
+
+/**
+ * Extract hashtags from text
+ */
+function extractHashtags(text: string | null | undefined): string[] {
+  if (!text) return []
+  const matches = text.match(/#[\w]+/g)
+  return matches ? matches.map((h) => h.toLowerCase()) : []
+}
+
+/**
+ * Extract mentions from text
+ */
+function extractMentions(text: string | null | undefined): string[] {
+  if (!text) return []
+  const matches = text.match(/@[\w.]+/g)
+  return matches ? matches.map((m) => m.toLowerCase()) : []
+}
+
+/**
+ * Store Facebook posts with their insights
+ */
+async function storePagePostsWithInsights(
+  db: typeof import('@/server/db').db,
+  accountId: string,
+  posts: MetaPost[],
+  insightsMap: Map<string, PostInsight[]>
+): Promise<number> {
+  let count = 0
+
+  for (const post of posts) {
+    const publishedAt = new Date(post.created_time)
+    const hashtags = extractHashtags(post.message)
+    const mentions = extractMentions(post.message)
+
+    // Determine content type based on post type
+    let contentType: 'POST' | 'VIDEO' | 'STORY' | 'REEL' | 'CAROUSEL' = 'POST'
+    if (post.type === 'video') contentType = 'VIDEO'
+
+    // Upsert content record
+    const content = await db.dimContent.upsert({
+      where: {
+        accountId_externalId: {
+          accountId,
+          externalId: post.id,
+        },
+      },
+      create: {
+        accountId,
+        externalId: post.id,
+        contentType,
+        message: post.message ?? post.story ?? null,
+        permalinkUrl: post.permalink_url,
+        mediaType: post.type?.toUpperCase(),
+        mediaUrl: post.full_picture,
+        publishedAt,
+        hashtags,
+        mentions,
+      },
+      update: {
+        message: post.message ?? post.story ?? null,
+        permalinkUrl: post.permalink_url,
+        mediaType: post.type?.toUpperCase(),
+        mediaUrl: post.full_picture,
+        hashtags,
+        mentions,
+      },
+    })
+
+    // Get insights for this post
+    const insights = insightsMap.get(post.id) ?? []
+
+    // Parse insights into metrics (value can be number or object, we only want numbers)
+    let impressions = 0
+    let reach = 0
+    let engagedUsers = 0
+    let clicks = 0
+    let likes = 0
+    let loves = 0
+
+    for (const insight of insights) {
+      const rawValue = insight.values?.[0]?.value
+      const value = typeof rawValue === 'number' ? rawValue : 0
+      switch (insight.name) {
+        case 'post_impressions':
+          impressions = value
+          break
+        case 'post_impressions_unique':
+          reach = value
+          break
+        case 'post_engaged_users':
+          engagedUsers = value
+          break
+        case 'post_clicks':
+          clicks = value
+          break
+        case 'post_reactions_like_total':
+          likes = value
+          break
+        case 'post_reactions_love_total':
+          loves = value
+          break
+      }
+    }
+
+    // Calculate engagement rate
+    const totalEngagement = engagedUsers + clicks
+    const engagementRate = reach > 0 ? (totalEngagement / reach) * 100 : 0
+
+    // Create content insights snapshot
+    await db.factContentInsights.create({
+      data: {
+        contentId: content.id,
+        likes: likes + loves,
+        comments: 0,
+        shares: post.shares?.count ?? 0,
+        reach,
+        impressions,
+        engagementRate,
+      },
+    })
+
+    count++
+  }
+
+  return count
+}
+
+/**
+ * Store Instagram media with their insights
+ */
+async function storeInstagramMediaWithInsights(
+  db: typeof import('@/server/db').db,
+  accountId: string,
+  media: InstagramMedia[],
+  insightsMap: Map<string, InstagramMediaInsight[]>
+): Promise<number> {
+  let count = 0
+
+  for (const item of media) {
+    const publishedAt = new Date(item.timestamp)
+    const hashtags = extractHashtags(item.caption)
+    const mentions = extractMentions(item.caption)
+
+    // Determine content type
+    let contentType: 'POST' | 'VIDEO' | 'STORY' | 'REEL' | 'CAROUSEL' = 'POST'
+    if (item.media_type === 'VIDEO') contentType = 'REEL'
+    if (item.media_type === 'CAROUSEL_ALBUM') contentType = 'CAROUSEL'
+
+    // Upsert content record
+    const content = await db.dimContent.upsert({
+      where: {
+        accountId_externalId: {
+          accountId,
+          externalId: item.id,
+        },
+      },
+      create: {
+        accountId,
+        externalId: item.id,
+        contentType,
+        message: item.caption ?? null,
+        permalinkUrl: item.permalink,
+        mediaType: item.media_type,
+        mediaUrl: item.media_url,
+        thumbnailUrl: item.thumbnail_url,
+        publishedAt,
+        hashtags,
+        mentions,
+      },
+      update: {
+        message: item.caption ?? null,
+        permalinkUrl: item.permalink,
+        mediaType: item.media_type,
+        mediaUrl: item.media_url,
+        thumbnailUrl: item.thumbnail_url,
+        hashtags,
+        mentions,
+      },
+    })
+
+    // Get insights for this media
+    const insights = insightsMap.get(item.id) ?? []
+
+    // Parse insights into metrics (value can be number or object, we only want numbers)
+    let impressions = 0
+    let reach = 0
+    let saved = 0
+    let plays = 0
+
+    for (const insight of insights) {
+      const rawValue = insight.values?.[0]?.value
+      const value = typeof rawValue === 'number' ? rawValue : 0
+      switch (insight.name) {
+        case 'impressions':
+          impressions = value
+          break
+        case 'reach':
+          reach = value
+          break
+        case 'saved':
+          saved = value
+          break
+        case 'plays':
+          plays = value
+          break
+      }
+    }
+
+    // Calculate engagement rate
+    const totalEngagement = (item.like_count ?? 0) + (item.comments_count ?? 0) + saved
+    const engagementRate = reach > 0 ? (totalEngagement / reach) * 100 : 0
+
+    // Create content insights snapshot
+    await db.factContentInsights.create({
+      data: {
+        contentId: content.id,
+        likes: item.like_count ?? 0,
+        comments: item.comments_count ?? 0,
+        saves: saved,
+        reach,
+        impressions,
+        videoPlays: plays > 0 ? plays : null,
+        engagementRate,
+      },
+    })
+
+    count++
   }
 
   return count
