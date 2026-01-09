@@ -61,6 +61,12 @@ export default function InsightsPage() {
   const syncInstagramInsights = api.metaAuth.syncInstagramInsights.useMutation({
     onSuccess: () => refetchInsights(),
   })
+  const syncPagePosts = api.metaAuth.syncPagePosts.useMutation({
+    onSuccess: () => refetchInsights(),
+  })
+  const syncInstagramMedia = api.metaAuth.syncInstagramMedia.useMutation({
+    onSuccess: () => refetchInsights(),
+  })
 
   // Calculate KPIs from insights
   const kpis = useMemo(() => {
@@ -335,7 +341,11 @@ export default function InsightsPage() {
     )
   }
 
-  const isSyncing = syncPageInsights.isPending || syncInstagramInsights.isPending
+  const isSyncing =
+    syncPageInsights.isPending ||
+    syncInstagramInsights.isPending ||
+    syncPagePosts.isPending ||
+    syncInstagramMedia.isPending
 
   return (
     <div className="space-y-6">
@@ -458,8 +468,14 @@ export default function InsightsPage() {
               const accounts = oauthStatus?.accounts ?? []
               const fbAccount = accounts.find((a) => a.platform === 'FACEBOOK')
               const igAccount = accounts.find((a) => a.platform === 'INSTAGRAM')
-              if (fbAccount) syncPageInsights.mutate({ accountId: fbAccount.id, days: 30 })
-              if (igAccount) syncInstagramInsights.mutate({ accountId: igAccount.id, days: 30 })
+              if (fbAccount) {
+                syncPageInsights.mutate({ accountId: fbAccount.id, days: 30 })
+                syncPagePosts.mutate({ accountId: fbAccount.id, limit: 50 })
+              }
+              if (igAccount) {
+                syncInstagramInsights.mutate({ accountId: igAccount.id, days: 30 })
+                syncInstagramMedia.mutate({ accountId: igAccount.id, limit: 50 })
+              }
             }}
             disabled={isSyncing}
           >
