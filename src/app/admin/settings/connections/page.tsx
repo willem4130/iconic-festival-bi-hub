@@ -113,14 +113,15 @@ export default function ConnectionsPage() {
       !!legacyStatus.data?.instagramAccountId,
   })
 
-  // Sync mutations
-  const syncPageInsights = api.metaInsights.syncPageInsights.useMutation({
+  // OAuth Sync mutations
+  const syncPageInsightsOAuth = api.metaAuth.syncPageInsights.useMutation({
     onSuccess: (data) => {
       toast({
         title: 'Facebook sync complete',
         description: `Synced ${data.insightsStored} days of insights`,
       })
       setSyncingPlatform(null)
+      utils.metaAuth.getConnectionStatus.invalidate()
     },
     onError: (error) => {
       toast({
@@ -132,13 +133,14 @@ export default function ConnectionsPage() {
     },
   })
 
-  const syncInstagramInsights = api.metaInsights.syncInstagramInsights.useMutation({
+  const syncInstagramInsightsOAuth = api.metaAuth.syncInstagramInsights.useMutation({
     onSuccess: (data) => {
       toast({
         title: 'Instagram sync complete',
         description: `Synced ${data.insightsStored} days of insights`,
       })
       setSyncingPlatform(null)
+      utils.metaAuth.getConnectionStatus.invalidate()
     },
     onError: (error) => {
       toast({
@@ -151,11 +153,23 @@ export default function ConnectionsPage() {
   })
 
   const handleSync = (platform: 'facebook' | 'instagram') => {
+    const accounts = oauthStatus.data?.accounts ?? []
+    const account = accounts.find((a) => a.platform === platform.toUpperCase())
+
+    if (!account) {
+      toast({
+        title: 'Sync failed',
+        description: `No ${platform} account connected`,
+        variant: 'destructive',
+      })
+      return
+    }
+
     setSyncingPlatform(platform)
     if (platform === 'facebook') {
-      syncPageInsights.mutate({ days: 30 })
+      syncPageInsightsOAuth.mutate({ accountId: account.id, days: 30 })
     } else {
-      syncInstagramInsights.mutate({ days: 30 })
+      syncInstagramInsightsOAuth.mutate({ accountId: account.id, days: 30 })
     }
   }
 
