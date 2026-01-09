@@ -13,30 +13,39 @@ Advanced Business Intelligence platform for tracking Facebook & Instagram perfor
 
 ```
 src/
-├── app/                      # Next.js App Router
-│   ├── (auth)/              # Authenticated routes (dashboard)
-│   ├── (public)/            # Public routes (about)
-│   ├── admin/               # Admin pages (dashboard, users, settings)
-│   └── api/                 # API routes (health, upload, trpc)
+├── app/                        # Next.js App Router
+│   ├── (auth)/                 # Authenticated routes
+│   ├── (public)/               # Public routes
+│   ├── admin/                  # Admin pages (dashboard, insights, settings)
+│   │   ├── insights/           # Analytics dashboards (ads, calendar, sentiment...)
+│   │   └── settings/connections/ # OAuth connections page
+│   └── api/                    # API routes
+│       ├── auth/meta/          # Meta OAuth endpoints
+│       ├── trpc/               # tRPC handler
+│       └── upload/             # File uploads
 ├── components/
-│   └── ui/                  # 28 shadcn/ui components
+│   ├── ui/                     # 28 shadcn/ui components
+│   ├── charts/                 # ECharts wrapper
+│   └── meta/                   # Meta OAuth components
 ├── server/
-│   ├── api/routers/         # 7 tRPC routers
-│   └── db/                  # Prisma client
+│   ├── api/routers/            # 15+ tRPC routers
+│   ├── db/                     # Prisma client
+│   └── auth.ts                 # NextAuth config
 ├── lib/
-│   ├── analytics/           # Pareto analysis
-│   ├── excel/               # Excel parsing
-│   ├── mapping/             # Column detection
-│   ├── transformation/      # Data transforms
-│   └── validation/          # Business rules
-├── hooks/                   # Custom React hooks
-└── trpc/                    # tRPC client config
+│   ├── meta-api/               # Meta Graph API (OAuth, insights, ads)
+│   ├── analytics/              # Pareto analysis
+│   ├── excel/                  # Excel parsing
+│   ├── sentiment-api/          # Sentiment analysis
+│   ├── weather-api/            # Weather data
+│   └── validation/             # Business rules
+├── hooks/                      # Custom React hooks
+└── trpc/                       # tRPC client config
 prisma/
-└── schema.prisma            # Database schema
+└── schema.prisma               # Database schema (650+ lines)
 tests/
-├── api/                     # API tests
-├── unit/                    # Unit tests
-└── e2e/                     # Playwright E2E tests
+├── api/                        # API tests
+├── unit/                       # Unit tests
+└── e2e/                        # Playwright E2E tests
 ```
 
 ## Tech Stack
@@ -44,10 +53,10 @@ tests/
 - **Framework**: Next.js 16 + React 19 (App Router, Turbopack)
 - **Language**: TypeScript 5.9
 - **API**: tRPC 11 (type-safe endpoints)
-- **Database**: Prisma 6 + PostgreSQL
+- **Database**: Prisma 6 + PostgreSQL (Neon)
 - **UI**: Tailwind CSS + shadcn/ui + Radix UI
-- **Charts**: Recharts (+ Apache ECharts for BI)
-- **Auth**: NextAuth 5
+- **Charts**: Apache ECharts + Recharts
+- **Auth**: NextAuth 5 + Meta OAuth
 
 ## Code Quality - Zero Tolerance
 
@@ -74,6 +83,7 @@ npm run dev
 ## Organization Rules
 
 - API routes → `src/server/api/routers/` (one router per domain)
+- Meta API logic → `src/lib/meta-api/` (OAuth, insights, ads)
 - Business logic → `src/lib/` (pure functions, no DB access)
 - Components → `src/components/ui/` (shadcn) or feature folders
 - Types → co-located or `src/types/`

@@ -32,6 +32,29 @@ export default function ConnectionsPage() {
 
   const utils = api.useUtils()
 
+  // State for discovered accounts (from mutation or cookie)
+  const [discoveredAccountsData, setDiscoveredAccountsData] = useState<{
+    connectionId: string
+    facebookPages: Array<{
+      id: string
+      name: string
+      username?: string
+      category?: string
+      profilePictureUrl?: string
+      followersCount?: number
+      hasInstagram: boolean
+    }>
+    instagramAccounts: Array<{
+      id: string
+      username: string
+      name?: string
+      profilePictureUrl?: string
+      followersCount?: number
+      linkedFacebookPageId: string
+      linkedFacebookPageName: string
+    }>
+  } | null>(null)
+
   // Check for OAuth callback status
   useEffect(() => {
     const error = searchParams.get('error')
@@ -61,8 +84,19 @@ export default function ConnectionsPage() {
 
   // Discovered accounts (from OAuth callback cookie)
   const discoveredAccounts = api.metaAuth.getDiscoveredAccounts.useQuery(undefined, {
-    enabled: showAccountSelector,
+    enabled: showAccountSelector && !discoveredAccountsData,
   })
+
+  // Sync cookie data to state when available
+  useEffect(() => {
+    if (discoveredAccounts.data?.connectionId && !discoveredAccountsData) {
+      setDiscoveredAccountsData({
+        connectionId: discoveredAccounts.data.connectionId,
+        facebookPages: discoveredAccounts.data.facebookPages,
+        instagramAccounts: discoveredAccounts.data.instagramAccounts,
+      })
+    }
+  }, [discoveredAccounts.data, discoveredAccountsData])
 
   // Legacy env-based connection status
   const legacyStatus = api.metaInsights.getConnectionStatus.useQuery()
@@ -121,6 +155,7 @@ export default function ConnectionsPage() {
 
   const handleAccountSelectorComplete = () => {
     setShowAccountSelector(false)
+    setDiscoveredAccountsData(null)
     utils.metaAuth.getConnectionStatus.invalidate()
     toast({
       title: 'Setup complete',
@@ -130,8 +165,21 @@ export default function ConnectionsPage() {
 
   // Refresh discovered accounts mutation
   const refreshDiscoveredAccounts = api.metaAuth.refreshDiscoveredAccounts.useMutation({
-    onSuccess: () => {
-      setShowAccountSelector(true)
+    onSuccess: (data) => {
+      if (data.connectionId) {
+        setDiscoveredAccountsData({
+          connectionId: data.connectionId,
+          facebookPages: data.facebookPages,
+          instagramAccounts: data.instagramAccounts,
+        })
+        setShowAccountSelector(true)
+      } else {
+        toast({
+          title: 'No accounts found',
+          description: 'No Facebook Pages or Instagram accounts were found for your Meta account',
+          variant: 'destructive',
+        })
+      }
     },
     onError: (error) => {
       toast({
@@ -150,8 +198,8 @@ export default function ConnectionsPage() {
   const hasOAuthConnection = oauthStatus.data?.connected
   const hasLegacyConnection = legacyStatus.data?.connected && !hasOAuthConnection
 
-  // Show account selector if we just completed OAuth
-  if (showAccountSelector && discoveredAccounts.data?.connectionId) {
+  // Show account selector if we just completed OAuth or clicked "Add More"
+  if (showAccountSelector && discoveredAccountsData?.connectionId) {
     return (
       <div className="space-y-6">
         <div>
@@ -161,11 +209,14 @@ export default function ConnectionsPage() {
           </p>
         </div>
         <AccountSelector
-          connectionId={discoveredAccounts.data.connectionId}
-          facebookPages={discoveredAccounts.data.facebookPages}
-          instagramAccounts={discoveredAccounts.data.instagramAccounts}
+          connectionId={discoveredAccountsData.connectionId}
+          facebookPages={discoveredAccountsData.facebookPages}
+          instagramAccounts={discoveredAccountsData.instagramAccounts}
           onComplete={handleAccountSelectorComplete}
-          onCancel={() => setShowAccountSelector(false)}
+          onCancel={() => {
+            setShowAccountSelector(false)
+            setDiscoveredAccountsData(null)
+          }}
         />
       </div>
     )
