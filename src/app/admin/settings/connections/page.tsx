@@ -98,13 +98,19 @@ export default function ConnectionsPage() {
     }
   }, [discoveredAccounts.data, discoveredAccountsData])
 
-  // Legacy env-based connection status
-  const legacyStatus = api.metaInsights.getConnectionStatus.useQuery()
+  // Legacy env-based connection status (only check if no OAuth connection)
+  const legacyStatus = api.metaInsights.getConnectionStatus.useQuery(undefined, {
+    enabled: !oauthStatus.data?.connected,
+  })
   const pageInfo = api.metaInsights.getPageInfo.useQuery(undefined, {
-    enabled: legacyStatus.data?.connected && !!legacyStatus.data?.pageId,
+    enabled:
+      !oauthStatus.data?.connected && legacyStatus.data?.connected && !!legacyStatus.data?.pageId,
   })
   const instagramInfo = api.metaInsights.getInstagramInfo.useQuery(undefined, {
-    enabled: legacyStatus.data?.connected && !!legacyStatus.data?.instagramAccountId,
+    enabled:
+      !oauthStatus.data?.connected &&
+      legacyStatus.data?.connected &&
+      !!legacyStatus.data?.instagramAccountId,
   })
 
   // Sync mutations
