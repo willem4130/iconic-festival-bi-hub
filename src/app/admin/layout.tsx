@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -218,8 +218,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 px-3">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src="/avatar.png" alt="User" />
-                    <AvatarFallback>AD</AvatarFallback>
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      AD
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col items-start text-sm">
                     <span className="font-medium">Admin User</span>

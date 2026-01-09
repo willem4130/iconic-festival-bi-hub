@@ -108,11 +108,20 @@ export type PageMetric =
  * Default metrics for daily page insights
  * Note: Many metrics were deprecated Nov 2025. Using only known working metrics.
  * See: https://github.com/facebook/facebook-python-business-sdk/issues/656
+ *
+ * Working metrics as of v21:
+ * - page_post_engagements (total engagement)
+ * - page_impressions_unique (unique reach)
+ * - page_video_views (video views)
+ * - page_views_total (page views - replacement for impressions)
+ * - page_follows (total followers - NEW replacement for page_fans)
  */
 export const DEFAULT_PAGE_METRICS: PageMetric[] = [
   'page_post_engagements',
   'page_impressions_unique', // Still works as of v21
   'page_video_views',
+  'page_views_total', // New metric (Nov 2025 replacement)
+  'page_follows', // New metric (Nov 2025 replacement for page_fans)
 ]
 
 export interface PageInsightsOptions {

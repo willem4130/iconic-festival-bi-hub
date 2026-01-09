@@ -101,8 +101,13 @@ export type InstagramAccountMetric =
 
 // Note: profile_views, website_clicks require metric_type=total_value
 // Using only metrics that work with time_series period=day
+// Working metrics as of v21:
+// - reach (unique accounts reached)
+// - impressions (total impressions)
+// - follower_count (total followers)
 export const DEFAULT_INSTAGRAM_ACCOUNT_METRICS: InstagramAccountMetric[] = [
   'reach',
+  'impressions',
   'follower_count',
 ]
 

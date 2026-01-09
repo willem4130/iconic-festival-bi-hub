@@ -88,3 +88,45 @@ npm run dev
 - Components → `src/components/ui/` (shadcn) or feature folders
 - Types → co-located or `src/types/`
 - Tests → `tests/` folder (unit, api, e2e)
+
+## Meta OAuth Integration (Current State)
+
+### What's Working
+
+- Meta OAuth flow (Facebook + Instagram connection)
+- OAuth callback, token storage, automatic token refresh
+- Account discovery (pages + Instagram business accounts)
+- OAuth-based sync endpoints in `metaAuth` router
+- Data syncing to `factAccountInsightsDaily` table
+- All insight pages use OAuth connection status check
+
+### Key Files
+
+- `src/server/api/routers/meta-auth.ts` - OAuth router with sync endpoints (`syncPageInsights`, `syncInstagramInsights`)
+- `src/server/api/routers/meta-insights.ts` - Legacy router (used for `getStoredInsights`, `getContentCalendar`, etc.)
+- `src/lib/meta-api/page-insights.ts` - Facebook metrics config
+- `src/lib/meta-api/instagram-insights.ts` - Instagram metrics config
+- `src/app/admin/settings/connections/page.tsx` - Connection management UI
+- `src/components/meta/connected-accounts.tsx` - Account display component
+
+### Meta API Deprecations (Nov 2025)
+
+Meta deprecated several metrics that cause "invalid metric" errors:
+
+- **Deprecated**: `page_impressions`, `page_fans`, `page_fan_adds`, `page_fan_removes`
+- **Working Facebook metrics**: `page_post_engagements`, `page_impressions_unique`, `page_video_views`, `page_views_total`, `page_follows`
+- **Working Instagram metrics**: `reach`, `follower_count`
+- **Instagram caveat**: `profile_views`, `website_clicks` require `metric_type=total_value` parameter
+
+### Data Storage
+
+- OAuth tokens → `MetaConnection` table
+- Page access tokens → `DimAccount.pageAccessToken`
+- Daily insights → `factAccountInsightsDaily` table with date dimensions
+
+## Next Steps (Backlog)
+
+1. Expand metrics being synced (add more working metrics)
+2. Add automatic/scheduled sync functionality
+3. Add more data visualizations with synced data
+4. Fix 404 errors for `avatar.png` and other missing assets

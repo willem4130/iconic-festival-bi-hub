@@ -32,13 +32,22 @@ import {
   RefreshCw,
   Target,
   ShoppingCart,
+  AlertCircle,
 } from 'lucide-react'
 import type { EChartsOption } from 'echarts'
 import Link from 'next/link'
 
 export default function AdPerformancePage() {
   const [days, setDays] = useState(30)
-  const { data, isLoading, refetch } = api.metaInsights.getAdPerformance.useQuery({ days })
+
+  // Use OAuth connection status
+  const { data: oauthStatus } = api.metaAuth.getConnectionStatus.useQuery()
+  const isConnected = oauthStatus?.connected ?? false
+
+  const { data, isLoading, refetch } = api.metaInsights.getAdPerformance.useQuery(
+    { days },
+    { enabled: isConnected }
+  )
   const syncCampaigns = api.metaInsights.syncAdCampaigns.useMutation({
     onSuccess: () => refetch(),
   })
@@ -276,6 +285,41 @@ export default function AdPerformancePage() {
       default:
         return <Target className="h-3 w-3" />
     }
+  }
+
+  // Not connected state
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/insights">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Insights
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Ad Performance</h1>
+            <p className="text-gray-500">Campaign spend, ROAS, and conversion metrics</p>
+          </div>
+        </div>
+
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex items-center gap-4 pt-6">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-amber-800">Meta API Not Connected</h3>
+              <p className="text-sm text-amber-700">
+                Connect your Facebook and Instagram accounts to view ad performance metrics.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/admin/settings/connections">Configure Connection</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

@@ -25,6 +25,7 @@ import {
   ArrowUpRight,
   Download,
   FileSpreadsheet,
+  AlertCircle,
 } from 'lucide-react'
 import type { EChartsOption } from 'echarts'
 import Link from 'next/link'
@@ -38,7 +39,15 @@ import { exportToExcel, exportToPDF } from '@/lib/export'
 
 export default function PlatformComparisonPage() {
   const [days, setDays] = useState(30)
-  const { data, isLoading } = api.metaInsights.getPlatformComparison.useQuery({ days })
+
+  // Use OAuth connection status
+  const { data: oauthStatus } = api.metaAuth.getConnectionStatus.useQuery()
+  const isConnected = oauthStatus?.connected ?? false
+
+  const { data, isLoading } = api.metaInsights.getPlatformComparison.useQuery(
+    { days },
+    { enabled: isConnected }
+  )
 
   // Reach comparison chart - side by side bars
   const reachComparisonChart: EChartsOption = useMemo(() => {
@@ -305,6 +314,41 @@ export default function PlatformComparisonPage() {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num.toString()
+  }
+
+  // Not connected state
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/admin/insights">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Insights
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Platform Comparison</h1>
+            <p className="text-gray-500">Facebook vs Instagram performance side-by-side</p>
+          </div>
+        </div>
+
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex items-center gap-4 pt-6">
+            <AlertCircle className="h-8 w-8 text-amber-600" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-amber-800">Meta API Not Connected</h3>
+              <p className="text-sm text-amber-700">
+                Connect your Facebook and Instagram accounts to compare platform performance.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/admin/settings/connections">Configure Connection</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (

@@ -613,11 +613,20 @@ export const metaAuthRouter = createTRPCRouter({
         pageId: account.externalId,
       })
 
+      // Fetch current page info (includes follower count)
+      const pageInfo = await getPageInfo(client)
+      const currentFollowers = pageInfo.followersCount ?? pageInfo.fanCount ?? null
+
       // Fetch insights
       const insights = await getPageInsightsForDays(client, input.days)
 
-      // Store insights
-      const storedCount = await storePageInsightsOAuth(ctx.db, account.id, insights)
+      // Store insights with current follower count
+      const storedCount = await storePageInsightsOAuth(
+        ctx.db,
+        account.id,
+        insights,
+        currentFollowers
+      )
 
       // Update last sync time
       await ctx.db.dimAccount.update({
@@ -629,6 +638,7 @@ export const metaAuthRouter = createTRPCRouter({
         success: true,
         accountId: account.id,
         insightsStored: storedCount,
+        currentFollowers,
         syncedAt: new Date().toISOString(),
       }
     } catch (error) {
@@ -682,11 +692,23 @@ export const metaAuthRouter = createTRPCRouter({
           instagramAccountId: account.externalId,
         })
 
+        // Fetch current Instagram account info (includes follower count)
+        const igAccountInfo = await getInstagramAccountInfo(
+          account.externalId,
+          account.pageAccessToken
+        )
+        const currentFollowers = igAccountInfo.followers_count ?? null
+
         // Fetch insights
         const insights = await getInstagramInsightsForDays(client, input.days)
 
-        // Store insights
-        const storedCount = await storeInstagramInsightsOAuth(ctx.db, account.id, insights)
+        // Store insights with current follower count
+        const storedCount = await storeInstagramInsightsOAuth(
+          ctx.db,
+          account.id,
+          insights,
+          currentFollowers
+        )
 
         // Update last sync time
         await ctx.db.dimAccount.update({
@@ -698,6 +720,7 @@ export const metaAuthRouter = createTRPCRouter({
           success: true,
           accountId: account.id,
           insightsStored: storedCount,
+          currentFollowers,
           syncedAt: new Date().toISOString(),
         }
       } catch (error) {
@@ -762,7 +785,8 @@ function getDayOfYear(date: Date): number {
 async function storePageInsightsOAuth(
   db: typeof import('@/server/db').db,
   accountId: string,
-  insights: PageInsightMetric[]
+  insights: PageInsightMetric[],
+  currentFollowers: number | null
 ): Promise<number> {
   let count = 0
 
@@ -778,6 +802,9 @@ async function storePageInsightsOAuth(
     }
   }
 
+  // Get today's date string for setting current follower count
+  const todayStr = new Date().toISOString().split('T')[0]!
+
   for (const [dateStr, metrics] of insightsByDate) {
     const date = new Date(dateStr)
 
@@ -786,6 +813,17 @@ async function storePageInsightsOAuth(
       create: createDateDimension(date),
       update: {},
     })
+
+    // Map API metrics to database fields
+    // Facebook Page Metrics:
+    // - page_impressions_unique -> pageReach
+    // - page_post_engagements -> pageEngagement
+    // - page_video_views -> videoViews
+    // - page_views_total -> pageViews (new Nov 2025)
+    // - page_follows -> pageFollows (new Nov 2025, replaces page_fans)
+    // For follower count: use API value if available, otherwise use current count for today
+    const followerCount =
+      metrics.get('page_follows') ?? (dateStr === todayStr ? currentFollowers : null)
 
     await db.factAccountInsightsDaily.upsert({
       where: {
@@ -800,15 +838,50 @@ async function storePageInsightsOAuth(
         pageReach: metrics.get('page_impressions_unique') ?? null,
         pageEngagement: metrics.get('page_post_engagements') ?? null,
         videoViews: metrics.get('page_video_views') ?? null,
+        pageViews: metrics.get('page_views_total') ?? null,
+        pageFollows: followerCount,
       },
       update: {
         pageReach: metrics.get('page_impressions_unique') ?? null,
         pageEngagement: metrics.get('page_post_engagements') ?? null,
         videoViews: metrics.get('page_video_views') ?? null,
+        pageViews: metrics.get('page_views_total') ?? null,
+        pageFollows: followerCount,
       },
     })
 
     count++
+  }
+
+  // If no insights were stored but we have current followers, create today's record
+  if (count === 0 && currentFollowers !== null) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const dimDate = await db.dimDate.upsert({
+      where: { date: today },
+      create: createDateDimension(today),
+      update: {},
+    })
+
+    await db.factAccountInsightsDaily.upsert({
+      where: {
+        accountId_dateId: {
+          accountId,
+          dateId: dimDate.id,
+        },
+      },
+      create: {
+        accountId,
+        dateId: dimDate.id,
+        pageFollows: currentFollowers,
+      },
+      update: {
+        pageFollows: currentFollowers,
+      },
+    })
+
+    count = 1
   }
 
   return count
@@ -817,7 +890,8 @@ async function storePageInsightsOAuth(
 async function storeInstagramInsightsOAuth(
   db: typeof import('@/server/db').db,
   accountId: string,
-  insights: InstagramInsightMetric[]
+  insights: InstagramInsightMetric[],
+  currentFollowers: number | null
 ): Promise<number> {
   let count = 0
 
@@ -834,12 +908,59 @@ async function storeInstagramInsightsOAuth(
     }
   }
 
+  // Get today's date string for setting current follower count
+  const todayStr = new Date().toISOString().split('T')[0]!
+
   for (const [dateStr, metrics] of insightsByDate) {
     const date = new Date(dateStr)
 
     const dimDate = await db.dimDate.upsert({
       where: { date },
       create: createDateDimension(date),
+      update: {},
+    })
+
+    // Map API metrics to database fields
+    // Instagram Account Metrics:
+    // - reach -> pageReach
+    // - impressions -> pageImpressions
+    // - follower_count -> pageFollows
+    // For follower count: use API value if available, otherwise use current count for today
+    const followerCount =
+      metrics.get('follower_count') ?? (dateStr === todayStr ? currentFollowers : null)
+
+    await db.factAccountInsightsDaily.upsert({
+      where: {
+        accountId_dateId: {
+          accountId,
+          dateId: dimDate.id,
+        },
+      },
+      create: {
+        accountId,
+        dateId: dimDate.id,
+        pageReach: metrics.get('reach') ?? null,
+        pageImpressions: metrics.get('impressions') ?? null,
+        pageFollows: followerCount,
+      },
+      update: {
+        pageReach: metrics.get('reach') ?? null,
+        pageImpressions: metrics.get('impressions') ?? null,
+        pageFollows: followerCount,
+      },
+    })
+
+    count++
+  }
+
+  // If no insights were stored but we have current followers, create today's record
+  if (count === 0 && currentFollowers !== null) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const dimDate = await db.dimDate.upsert({
+      where: { date: today },
+      create: createDateDimension(today),
       update: {},
     })
 
@@ -853,16 +974,14 @@ async function storeInstagramInsightsOAuth(
       create: {
         accountId,
         dateId: dimDate.id,
-        pageReach: metrics.get('reach') ?? null,
-        pageFollows: metrics.get('follower_count') ?? null,
+        pageFollows: currentFollowers,
       },
       update: {
-        pageReach: metrics.get('reach') ?? null,
-        pageFollows: metrics.get('follower_count') ?? null,
+        pageFollows: currentFollowers,
       },
     })
 
-    count++
+    count = 1
   }
 
   return count
