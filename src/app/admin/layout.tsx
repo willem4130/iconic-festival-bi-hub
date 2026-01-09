@@ -14,9 +14,13 @@ import {
   BarChart3,
   Calendar,
   GitCompare,
+  ChevronDown,
+  ChevronRight,
+  Sparkles,
+  Image,
+  ArrowLeftRight,
   DollarSign,
   Cloud,
-  ChevronDown,
   Link2,
   Hash,
   MessageSquare,
@@ -45,48 +49,98 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   {
-    title: 'Dashboard',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Insights',
+    title: 'BI Insights',
     href: '/admin/insights',
     icon: BarChart3,
     children: [
       { title: 'Overview', href: '/admin/insights', icon: BarChart3 },
+      { title: 'Content Hub', href: '/admin/insights/content', icon: Image },
+      { title: 'Compare Posts', href: '/admin/insights/content/compare', icon: ArrowLeftRight },
+      { title: 'AI Analysis', href: '/admin/insights/ai', icon: Sparkles },
+      { title: 'FB vs IG', href: '/admin/insights/comparison', icon: GitCompare },
       { title: 'Calendar', href: '/admin/insights/calendar', icon: Calendar },
-      { title: 'Comparison', href: '/admin/insights/comparison', icon: GitCompare },
-      { title: 'Ad Performance', href: '/admin/insights/ads', icon: DollarSign },
-      { title: 'Weather', href: '/admin/insights/weather', icon: Cloud },
-      { title: 'Attribution', href: '/admin/insights/attribution', icon: Link2 },
-      { title: 'Hashtags', href: '/admin/insights/hashtags', icon: Hash },
-      { title: 'Sentiment', href: '/admin/insights/sentiment', icon: MessageSquare },
-      { title: 'Mentions', href: '/admin/insights/mentions', icon: AtSign },
-      { title: 'Correlations', href: '/admin/insights/correlations', icon: TrendingUp },
     ],
   },
   {
-    title: 'Users',
-    href: '/admin/users',
-    icon: Users,
+    title: 'Advanced Analytics',
+    href: '/admin/insights/ads',
+    icon: TrendingUp,
+    children: [
+      { title: 'Ad Performance', href: '/admin/insights/ads', icon: DollarSign },
+      { title: 'Attribution', href: '/admin/insights/attribution', icon: Link2 },
+      { title: 'Correlations', href: '/admin/insights/correlations', icon: TrendingUp },
+      { title: 'Weather Impact', href: '/admin/insights/weather', icon: Cloud },
+    ],
   },
   {
-    title: 'Connections',
-    href: '/admin/settings/connections',
-    icon: Plug,
+    title: 'Social Listening',
+    href: '/admin/insights/sentiment',
+    icon: MessageSquare,
+    children: [
+      { title: 'Sentiment', href: '/admin/insights/sentiment', icon: MessageSquare },
+      { title: 'Hashtags', href: '/admin/insights/hashtags', icon: Hash },
+      { title: 'Mentions', href: '/admin/insights/mentions', icon: AtSign },
+    ],
   },
   {
     title: 'Settings',
     href: '/admin/settings',
     icon: Settings,
+    children: [
+      { title: 'Connections', href: '/admin/settings/connections', icon: Plug },
+      { title: 'Users', href: '/admin/users', icon: Users },
+    ],
   },
 ]
+
+// Build version for deployment verification
+const BUILD_VERSION = '2026-01-09T23:00:00+01:00'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Insights'])
+  const [expandedItems, setExpandedItems] = useState<string[]>(() => {
+    // Auto-expand sections based on current path
+    const expanded: string[] = []
+
+    const biInsightsPages = [
+      '/admin/insights',
+      '/admin/insights/content',
+      '/admin/insights/ai',
+      '/admin/insights/comparison',
+      '/admin/insights/calendar',
+    ]
+    const advancedPages = [
+      '/admin/insights/ads',
+      '/admin/insights/attribution',
+      '/admin/insights/correlations',
+      '/admin/insights/weather',
+    ]
+    const socialPages = [
+      '/admin/insights/sentiment',
+      '/admin/insights/hashtags',
+      '/admin/insights/mentions',
+    ]
+
+    if (biInsightsPages.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+      expanded.push('BI Insights')
+    }
+    if (advancedPages.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+      expanded.push('Advanced Analytics')
+    }
+    if (socialPages.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
+      expanded.push('Social Listening')
+    }
+    if (pathname.startsWith('/admin/settings') || pathname.startsWith('/admin/users')) {
+      expanded.push('Settings')
+    }
+
+    // Default to BI Insights expanded if nothing else
+    if (expanded.length === 0) {
+      expanded.push('BI Insights')
+    }
+    return expanded
+  })
 
   const toggleExpand = (title: string) => {
     setExpandedItems((prev) =>
@@ -114,11 +168,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="flex h-full flex-col">
           {/* Logo/Header */}
           <div className="flex h-16 items-center justify-between px-6">
-            <Link href="/admin/dashboard" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <LayoutDashboard className="h-5 w-5" />
+            <Link href="/admin/insights" className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#aa7712] text-white font-bold text-sm">
+                IF
               </div>
-              <span className="text-xl font-bold">Admin</span>
+              <span className="text-lg font-bold">Iconic Festival</span>
             </Link>
             <Button
               variant="ghost"
@@ -156,12 +210,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <Icon className="h-5 w-5" />
                         {item.title}
                       </span>
-                      <ChevronDown
-                        className={cn(
-                          'h-4 w-4 transition-transform',
-                          isExpanded ? 'rotate-180' : ''
-                        )}
-                      />
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
                     </button>
                     {isExpanded && item.children && (
                       <div className="ml-4 mt-1 space-y-1 border-l-2 border-gray-200 pl-3 dark:border-gray-700">
@@ -217,14 +270,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 px-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground">
-                      AD
-                    </AvatarFallback>
+                  <Avatar className="h-8 w-8 bg-[#aa7712]">
+                    <AvatarFallback className="bg-[#aa7712] text-white">IF</AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col items-start text-sm">
-                    <span className="font-medium">Admin User</span>
-                    <span className="text-xs text-gray-500">admin@example.com</span>
+                    <span className="font-medium">Iconic Festival</span>
+                    <span className="text-xs text-gray-500">admin@iconicfestival.nl</span>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
@@ -245,6 +296,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {/* Build version indicator */}
+          <div className="px-4 pb-3 text-[10px] text-gray-400 font-mono">
+            v{BUILD_VERSION.slice(0, 16).replace('T', ' ')}
+          </div>
         </div>
       </aside>
 
@@ -255,7 +311,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-6 w-6" />
           </Button>
-          <span className="text-xl font-bold">Admin</span>
+          <span className="text-lg font-bold">Iconic Festival</span>
         </header>
 
         {/* Page content */}
