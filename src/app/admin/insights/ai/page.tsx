@@ -59,28 +59,49 @@ export default function AIAnalysisPage() {
   const {
     data: strategicAdvice,
     isLoading: strategicLoading,
+    isError: strategicError,
     refetch: refetchStrategic,
   } = api.aiAnalysis.getStrategicAdvice.useQuery(
     { platform, focus: focusArea, days: 30 },
-    { enabled: isConnected && activeTab === 'strategic' }
+    {
+      enabled: isConnected && activeTab === 'strategic',
+      retry: 2,
+      retryDelay: 1000,
+      staleTime: 1000 * 60 * 30, // 30 minutes
+      refetchOnWindowFocus: false,
+    }
   )
 
   const {
     data: narrativeReport,
     isLoading: reportLoading,
+    isError: reportError,
     refetch: refetchReport,
   } = api.aiAnalysis.generateNarrativeReport.useQuery(
     { platform, month, year },
-    { enabled: isConnected && activeTab === 'report' }
+    {
+      enabled: isConnected && activeTab === 'report',
+      retry: 2,
+      retryDelay: 1000,
+      staleTime: 1000 * 60 * 30, // 30 minutes
+      refetchOnWindowFocus: false,
+    }
   )
 
   const {
     data: postingRecs,
     isLoading: recsLoading,
+    isError: recsError,
     refetch: refetchRecs,
   } = api.aiAnalysis.getPostingRecommendations.useQuery(
     { platform, days: 30 },
-    { enabled: isConnected && activeTab === 'recommendations' }
+    {
+      enabled: isConnected && activeTab === 'recommendations',
+      retry: 2,
+      retryDelay: 1000,
+      staleTime: 1000 * 60 * 30, // 30 minutes
+      refetchOnWindowFocus: false,
+    }
   )
 
   // Not connected state
@@ -187,6 +208,11 @@ export default function AIAnalysisPage() {
 
           {strategicLoading ? (
             <LoadingState message="Generating strategic advice..." analysisType="strategic" />
+          ) : strategicError ? (
+            <ErrorState
+              message="Failed to generate strategic advice. The AI service may be temporarily unavailable."
+              onRetry={() => refetchStrategic()}
+            />
           ) : strategicAdvice ? (
             <div className="space-y-6">
               {/* Performance Overview */}
@@ -554,6 +580,11 @@ export default function AIAnalysisPage() {
 
           {reportLoading ? (
             <LoadingState message="Generating monthly report..." analysisType="report" />
+          ) : reportError ? (
+            <ErrorState
+              message="Failed to generate monthly report. The AI service may be temporarily unavailable."
+              onRetry={() => refetchReport()}
+            />
           ) : narrativeReport ? (
             <div className="grid gap-6">
               {/* Summary */}
@@ -667,6 +698,11 @@ export default function AIAnalysisPage() {
 
           {recsLoading ? (
             <LoadingState message="Analyzing posting patterns..." analysisType="recommendations" />
+          ) : recsError ? (
+            <ErrorState
+              message="Failed to generate posting recommendations. The AI service may be temporarily unavailable."
+              onRetry={() => refetchRecs()}
+            />
           ) : postingRecs ? (
             <div className="space-y-6">
               {/* Top Row - Key Stats */}
@@ -1362,6 +1398,32 @@ function EmptyState({ message }: { message: string }) {
         <div className="flex flex-col items-center gap-4">
           <AlertCircle className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground text-center max-w-md">{message}</p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Card className="border-red-200 dark:border-red-800">
+      <CardContent className="py-8">
+        <div className="flex flex-col items-center gap-4">
+          <div className="p-3 rounded-full bg-red-100 dark:bg-red-900/30">
+            <AlertCircle className="h-8 w-8 text-red-500" />
+          </div>
+          <div className="text-center">
+            <h3 className="font-semibold text-red-800 dark:text-red-200 mb-1">Analysis Failed</h3>
+            <p className="text-sm text-red-600 dark:text-red-400 max-w-md">{message}</p>
+          </div>
+          <Button onClick={onRetry} variant="outline" className="mt-2">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Try Again
+          </Button>
+          <p className="text-xs text-muted-foreground text-center max-w-sm">
+            Tip: AI analysis may take 15-30 seconds. If it keeps failing, try refreshing the page or
+            check your internet connection.
+          </p>
         </div>
       </CardContent>
     </Card>
