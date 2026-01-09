@@ -1,11 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/trpc/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Select,
@@ -187,7 +186,7 @@ export default function AIAnalysisPage() {
           </div>
 
           {strategicLoading ? (
-            <LoadingState message="Generating strategic advice..." />
+            <LoadingState message="Generating strategic advice..." analysisType="strategic" />
           ) : strategicAdvice ? (
             <div className="space-y-6">
               {/* Performance Overview */}
@@ -554,7 +553,7 @@ export default function AIAnalysisPage() {
           </div>
 
           {reportLoading ? (
-            <LoadingState message="Generating monthly report..." />
+            <LoadingState message="Generating monthly report..." analysisType="report" />
           ) : narrativeReport ? (
             <div className="grid gap-6">
               {/* Summary */}
@@ -667,7 +666,7 @@ export default function AIAnalysisPage() {
           </div>
 
           {recsLoading ? (
-            <LoadingState message="Analyzing posting patterns..." />
+            <LoadingState message="Analyzing posting patterns..." analysisType="recommendations" />
           ) : postingRecs ? (
             <div className="space-y-6">
               {/* Top Row - Key Stats */}
@@ -1156,17 +1155,199 @@ function Header() {
   )
 }
 
-function LoadingState({ message }: { message: string }) {
+type AnalysisType = 'strategic' | 'report' | 'recommendations'
+
+const ANALYSIS_STEPS: Record<AnalysisType, { step: string; detail: string }[]> = {
+  strategic: [
+    { step: 'Gathering metrics', detail: 'Collecting reach, engagement, and follower data...' },
+    { step: 'Analyzing performance', detail: 'Evaluating content performance patterns...' },
+    { step: 'Benchmarking', detail: 'Comparing against industry standards...' },
+    { step: 'Identifying opportunities', detail: 'Finding growth opportunities and quick wins...' },
+    { step: 'Assessing risks', detail: 'Evaluating potential vulnerabilities...' },
+    { step: 'Generating projections', detail: 'Creating growth forecasts...' },
+    { step: 'Finalizing recommendations', detail: 'Preparing actionable insights...' },
+  ],
+  report: [
+    { step: 'Loading monthly data', detail: 'Fetching insights for the selected period...' },
+    { step: 'Calculating metrics', detail: 'Computing reach, engagement, and growth...' },
+    { step: 'Analyzing top content', detail: 'Identifying best performing posts...' },
+    { step: 'Identifying challenges', detail: 'Evaluating areas for improvement...' },
+    { step: 'Writing summary', detail: 'Generating executive summary...' },
+    { step: 'Preparing outlook', detail: 'Creating forward-looking insights...' },
+  ],
+  recommendations: [
+    { step: 'Analyzing posting history', detail: 'Reviewing your content performance...' },
+    { step: 'Identifying peak times', detail: 'Finding optimal posting windows...' },
+    { step: 'Evaluating content types', detail: 'Analyzing which formats perform best...' },
+    { step: 'Building weekly schedule', detail: 'Creating day-by-day content plan...' },
+    {
+      step: 'Crafting hashtag strategy',
+      detail: 'Organizing branded, trending, and niche tags...',
+    },
+    { step: 'Generating caption templates', detail: 'Creating ready-to-use caption structures...' },
+    { step: 'Analyzing audience', detail: 'Understanding engagement patterns...' },
+    { step: 'Compiling platform tips', detail: 'Gathering actionable recommendations...' },
+  ],
+}
+
+function LoadingState({
+  message,
+  analysisType = 'strategic',
+}: {
+  message: string
+  analysisType?: AnalysisType
+}) {
+  const [currentStep, setCurrentStep] = useState(0)
+  const [elapsedTime, setElapsedTime] = useState(0)
+  const steps = ANALYSIS_STEPS[analysisType]
+
+  // Progress through steps
+  useEffect(() => {
+    const stepInterval = setInterval(() => {
+      setCurrentStep((prev) => {
+        if (prev < steps.length - 1) return prev + 1
+        return prev
+      })
+    }, 2500) // Move to next step every 2.5 seconds
+
+    return () => clearInterval(stepInterval)
+  }, [steps.length])
+
+  // Track elapsed time
+  useEffect(() => {
+    const timeInterval = setInterval(() => {
+      setElapsedTime((prev) => prev + 1)
+    }, 1000)
+
+    return () => clearInterval(timeInterval)
+  }, [])
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+  }
+
   return (
-    <Card>
-      <CardContent className="py-12">
-        <div className="flex flex-col items-center gap-4">
-          <Sparkles className="h-8 w-8 text-purple-500 animate-pulse" />
-          <p className="text-sm text-muted-foreground">{message}</p>
-          <div className="w-full max-w-md space-y-3">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-4 w-5/6" />
+    <Card className="border-purple-200 dark:border-purple-800">
+      <CardContent className="py-8">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Sparkles className="h-8 w-8 text-purple-500" />
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-500"></span>
+                </span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-purple-900 dark:text-purple-100">
+                  Claude is analyzing your data
+                </h3>
+                <p className="text-sm text-muted-foreground">{message}</p>
+              </div>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              {formatTime(elapsedTime)}
+            </Badge>
+          </div>
+
+          {/* Progress bar */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Progress</span>
+              <span>{Math.round(((currentStep + 1) / steps.length) * 100)}%</span>
+            </div>
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-purple-500 to-blue-500 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Steps list */}
+          <div className="space-y-2">
+            {steps.map((step, index) => {
+              const isComplete = index < currentStep
+              const isCurrent = index === currentStep
+
+              return (
+                <div
+                  key={index}
+                  className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-300 ${
+                    isCurrent
+                      ? 'bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800'
+                      : ''
+                  }`}
+                >
+                  {/* Status icon */}
+                  <div className="flex-shrink-0">
+                    {isComplete ? (
+                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                        <svg
+                          className="w-4 h-4 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 13l4 4L19 7"
+                          />
+                        </svg>
+                      </div>
+                    ) : isCurrent ? (
+                      <div className="w-6 h-6 rounded-full border-2 border-purple-500 flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full border-2 border-muted-foreground/30" />
+                    )}
+                  </div>
+
+                  {/* Step content */}
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`text-sm font-medium ${
+                        isComplete
+                          ? 'text-green-600 dark:text-green-400'
+                          : isCurrent
+                            ? 'text-purple-700 dark:text-purple-300'
+                            : 'text-muted-foreground'
+                      }`}
+                    >
+                      {step.step}
+                    </p>
+                    {isCurrent && (
+                      <p className="text-xs text-purple-600 dark:text-purple-400 animate-pulse">
+                        {step.detail}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Status badge */}
+                  {isCurrent && (
+                    <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 text-xs">
+                      In progress
+                    </Badge>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Tip */}
+          <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg text-xs">
+            <Lightbulb className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-blue-700 dark:text-blue-300">
+              <span className="font-medium">Tip:</span> Complex analysis may take 15-30 seconds.
+              Claude is generating detailed, personalized recommendations based on your actual data.
+            </p>
           </div>
         </div>
       </CardContent>
