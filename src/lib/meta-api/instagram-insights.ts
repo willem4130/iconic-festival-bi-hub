@@ -100,7 +100,6 @@ export type InstagramAccountMetric =
   | 'website_clicks'
 
 export const DEFAULT_INSTAGRAM_ACCOUNT_METRICS: InstagramAccountMetric[] = [
-  'impressions',
   'reach',
   'profile_views',
   'follower_count',
