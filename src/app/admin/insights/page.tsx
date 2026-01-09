@@ -28,6 +28,9 @@ import {
   Facebook,
   Instagram,
   ImageIcon,
+  LayoutDashboard,
+  BarChart3,
+  FileText,
 } from 'lucide-react'
 import type { EChartsOption } from 'echarts'
 import Link from 'next/link'
@@ -37,9 +40,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Download, FileSpreadsheet, FileText } from 'lucide-react'
+import { Download, FileSpreadsheet } from 'lucide-react'
 import { exportToExcel, exportToPDF, exportKPIsToPDF } from '@/lib/export'
 import { useInsights, PlatformToggle } from '@/components/insights'
+import { SectionWrapper, KPICardSparkline, AIQuickInsights } from '@/components/insights/overview'
 
 export default function InsightsPage() {
   const { platform, days } = useInsights()
@@ -88,8 +92,8 @@ export default function InsightsPage() {
     onSuccess: () => refetchInsights(),
   })
 
-  // Calculate KPIs from insights
-  const kpis = useMemo(() => {
+  // Calculate KPIs from insights with sparkline data
+  const kpiData = useMemo(() => {
     if (!insights?.length) {
       return {
         totalReach: 0,
@@ -97,13 +101,36 @@ export default function InsightsPage() {
         totalFollowers: 0,
         newFollowers: 0,
         avgEngagementRate: 0,
+        reachSparkline: [] as { value: number }[],
+        engagementSparkline: [] as { value: number }[],
+        followerSparkline: [] as { value: number }[],
+        reachTrend: 0,
+        engagementTrend: 0,
+        followerTrend: 0,
       }
     }
+
+    const sortedInsights = [...insights].sort(
+      (a, b) => new Date(a.date.date).getTime() - new Date(b.date.date).getTime()
+    )
 
     const latest = insights[0]
     const totalReach = insights.reduce((sum, i) => sum + (i.pageReach ?? 0), 0)
     const totalEngagement = insights.reduce((sum, i) => sum + (i.pageEngagement ?? 0), 0)
     const newFollowers = insights.reduce((sum, i) => sum + (i.pageFollowsNew ?? 0), 0)
+
+    // Calculate trends (compare last 7 days vs previous 7 days)
+    const halfPoint = Math.floor(insights.length / 2)
+    const recentReach = insights.slice(0, halfPoint).reduce((s, i) => s + (i.pageReach ?? 0), 0)
+    const olderReach = insights.slice(halfPoint).reduce((s, i) => s + (i.pageReach ?? 0), 0)
+    const recentEngagement = insights
+      .slice(0, halfPoint)
+      .reduce((s, i) => s + (i.pageEngagement ?? 0), 0)
+    const olderEngagement = insights
+      .slice(halfPoint)
+      .reduce((s, i) => s + (i.pageEngagement ?? 0), 0)
+    const recentFollowers = insights[0]?.pageFollows ?? 0
+    const olderFollowers = insights[halfPoint]?.pageFollows ?? 0
 
     return {
       totalReach,
@@ -112,6 +139,14 @@ export default function InsightsPage() {
       newFollowers,
       avgEngagementRate:
         totalReach > 0 ? ((totalEngagement / totalReach) * 100).toFixed(2) : '0.00',
+      reachSparkline: sortedInsights.map((i) => ({ value: i.pageReach ?? 0 })),
+      engagementSparkline: sortedInsights.map((i) => ({ value: i.pageEngagement ?? 0 })),
+      followerSparkline: sortedInsights.map((i) => ({ value: i.pageFollows ?? 0 })),
+      reachTrend: olderReach > 0 ? ((recentReach - olderReach) / olderReach) * 100 : 0,
+      engagementTrend:
+        olderEngagement > 0 ? ((recentEngagement - olderEngagement) / olderEngagement) * 100 : 0,
+      followerTrend:
+        olderFollowers > 0 ? ((recentFollowers - olderFollowers) / olderFollowers) * 100 : 0,
     }
   }, [insights])
 
@@ -393,21 +428,6 @@ export default function InsightsPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-4">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/content">
-              <ImageIcon className="mr-2 h-4 w-4" />
-              Content
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/comparison">Compare</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/calendar">Calendar</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/ads">Ads</Link>
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -440,11 +460,14 @@ export default function InsightsPage() {
                 onClick={() => {
                   exportKPIsToPDF(
                     [
-                      { label: 'Total Followers', value: kpis.totalFollowers.toLocaleString() },
-                      { label: 'New Followers', value: `+${kpis.newFollowers.toLocaleString()}` },
-                      { label: 'Total Reach', value: formatNumber(kpis.totalReach) },
-                      { label: 'Total Engagement', value: formatNumber(kpis.totalEngagement) },
-                      { label: 'Engagement Rate', value: `${kpis.avgEngagementRate}%` },
+                      { label: 'Total Followers', value: kpiData.totalFollowers.toLocaleString() },
+                      {
+                        label: 'New Followers',
+                        value: `+${kpiData.newFollowers.toLocaleString()}`,
+                      },
+                      { label: 'Total Reach', value: formatNumber(kpiData.totalReach) },
+                      { label: 'Total Engagement', value: formatNumber(kpiData.totalEngagement) },
+                      { label: 'Engagement Rate', value: `${kpiData.avgEngagementRate}%` },
                     ],
                     {
                       filename: 'social_insights_summary',
@@ -515,229 +538,244 @@ export default function InsightsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <KPICard
-          title="Total Followers"
-          value={kpis.totalFollowers.toLocaleString()}
-          icon={Users}
-          description="Current follower count"
-          loading={insightsLoading}
-        />
-        <KPICard
-          title="New Followers"
-          value={`+${kpis.newFollowers.toLocaleString()}`}
-          icon={TrendingUp}
-          description="Last 30 days"
-          loading={insightsLoading}
-          positive
-        />
-        <KPICard
-          title="Total Reach"
-          value={formatNumber(kpis.totalReach)}
-          icon={Eye}
-          description="Last 30 days"
-          loading={insightsLoading}
-        />
-        <KPICard
-          title="Total Engagement"
-          value={formatNumber(kpis.totalEngagement)}
-          icon={Heart}
-          description="Last 30 days"
-          loading={insightsLoading}
-        />
-        <KPICard
-          title="Engagement Rate"
-          value={`${kpis.avgEngagementRate}%`}
-          icon={TrendingUp}
-          description="Avg. engagement/reach"
-          loading={insightsLoading}
-        />
-      </div>
+      {/* Section 1: Executive Summary */}
+      <SectionWrapper
+        title="Executive Summary"
+        description="Key performance indicators and AI insights"
+        icon={LayoutDashboard}
+        defaultOpen={true}
+      >
+        <div className="space-y-6">
+          {/* KPI Cards with Sparklines */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <KPICardSparkline
+              title="Total Followers"
+              value={kpiData.totalFollowers.toLocaleString()}
+              icon={Users}
+              description="Current follower count"
+              loading={insightsLoading}
+              sparklineData={kpiData.followerSparkline}
+              trend={
+                kpiData.followerTrend !== 0
+                  ? { value: kpiData.followerTrend, label: 'vs prev period' }
+                  : undefined
+              }
+            />
+            <KPICardSparkline
+              title="New Followers"
+              value={`+${kpiData.newFollowers.toLocaleString()}`}
+              icon={TrendingUp}
+              description={`Last ${days} days`}
+              loading={insightsLoading}
+            />
+            <KPICardSparkline
+              title="Total Reach"
+              value={formatNumber(kpiData.totalReach)}
+              icon={Eye}
+              description={`Last ${days} days`}
+              loading={insightsLoading}
+              sparklineData={kpiData.reachSparkline}
+              trend={
+                kpiData.reachTrend !== 0
+                  ? { value: kpiData.reachTrend, label: 'vs prev period' }
+                  : undefined
+              }
+            />
+            <KPICardSparkline
+              title="Total Engagement"
+              value={formatNumber(kpiData.totalEngagement)}
+              icon={Heart}
+              description={`Last ${days} days`}
+              loading={insightsLoading}
+              sparklineData={kpiData.engagementSparkline}
+              trend={
+                kpiData.engagementTrend !== 0
+                  ? { value: kpiData.engagementTrend, label: 'vs prev period' }
+                  : undefined
+              }
+            />
+            <KPICardSparkline
+              title="Engagement Rate"
+              value={`${kpiData.avgEngagementRate}%`}
+              icon={TrendingUp}
+              description="Avg. engagement/reach"
+              loading={insightsLoading}
+            />
+          </div>
 
-      {/* Charts */}
-      <Tabs defaultValue="reach" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="reach">Reach & Impressions</TabsTrigger>
-          <TabsTrigger value="followers">Follower Growth</TabsTrigger>
-          <TabsTrigger value="engagement">Engagement</TabsTrigger>
-        </TabsList>
+          {/* AI Quick Insights */}
+          <AIQuickInsights />
+        </div>
+      </SectionWrapper>
 
-        <TabsContent value="reach">
-          <Card>
-            <CardHeader>
-              <CardTitle>Reach & Impressions Over Time</CardTitle>
-              <CardDescription>Daily unique users reached and total impressions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {insightsLoading ? (
-                <Skeleton className="h-[400px] w-full" />
-              ) : (
-                <EChartsWrapper option={reachChartOption} height={400} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+      {/* Section 2: Dashboard Hub */}
+      <SectionWrapper
+        title="Dashboard Hub"
+        description="Performance trends and analytics"
+        icon={BarChart3}
+        defaultOpen={true}
+        headerAction={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/insights/content">
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Content
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/insights/comparison">Compare</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/insights/calendar">Calendar</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/admin/insights/ads">Ads</Link>
+            </Button>
+          </div>
+        }
+      >
+        <Tabs defaultValue="reach" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="reach">Reach & Impressions</TabsTrigger>
+            <TabsTrigger value="followers">Follower Growth</TabsTrigger>
+            <TabsTrigger value="engagement">Engagement</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="followers">
-          <Card>
-            <CardHeader>
-              <CardTitle>Follower Growth</CardTitle>
-              <CardDescription>Total followers and daily changes</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {insightsLoading ? (
-                <Skeleton className="h-[400px] w-full" />
-              ) : (
-                <EChartsWrapper option={followerChartOption} height={400} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+          <TabsContent value="reach">
+            <Card>
+              <CardHeader>
+                <CardTitle>Reach & Impressions Over Time</CardTitle>
+                <CardDescription>Daily unique users reached and total impressions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {insightsLoading ? (
+                  <Skeleton className="h-[400px] w-full" />
+                ) : (
+                  <EChartsWrapper option={reachChartOption} height={400} />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="engagement">
-          <Card>
-            <CardHeader>
-              <CardTitle>Engagement Breakdown</CardTitle>
-              <CardDescription>Reactions, comments, and shares over time</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {insightsLoading ? (
-                <Skeleton className="h-[400px] w-full" />
-              ) : (
-                <EChartsWrapper option={engagementChartOption} height={400} />
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="followers">
+            <Card>
+              <CardHeader>
+                <CardTitle>Follower Growth</CardTitle>
+                <CardDescription>Total followers and daily changes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {insightsLoading ? (
+                  <Skeleton className="h-[400px] w-full" />
+                ) : (
+                  <EChartsWrapper option={followerChartOption} height={400} />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-      {/* Content Performance Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Content Performance</CardTitle>
-          <CardDescription>Latest posts and their engagement metrics</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {contentLoading ? (
-            <div className="space-y-2">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : content?.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Content</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Reach</TableHead>
-                  <TableHead className="text-right">Engagement</TableHead>
-                  <TableHead className="text-right">Published</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {content.map((item) => {
-                  const latestInsights = item.contentInsights[0]
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="max-w-xs truncate font-medium">
-                        {item.message ?? 'No caption'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{item.contentType}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {item.account.platform.platform === 'FACEBOOK' ? (
-                            <Facebook className="mr-1 h-3 w-3" />
-                          ) : (
-                            <Instagram className="mr-1 h-3 w-3" />
-                          )}
-                          {item.account.platform.displayName}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {latestInsights?.reach?.toLocaleString() ?? '-'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="flex items-center gap-1">
-                            <Heart className="h-3 w-3" />
-                            {latestInsights?.likes ?? 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MessageSquare className="h-3 w-3" />
-                            {latestInsights?.comments ?? 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Share2 className="h-3 w-3" />
-                            {latestInsights?.shares ?? 0}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {new Date(item.publishedAt).toLocaleDateString()}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="text-center text-gray-500 py-8">
-              No content yet. Sync your Facebook or Instagram content to see performance data.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          <TabsContent value="engagement">
+            <Card>
+              <CardHeader>
+                <CardTitle>Engagement Breakdown</CardTitle>
+                <CardDescription>Reactions, comments, and shares over time</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {insightsLoading ? (
+                  <Skeleton className="h-[400px] w-full" />
+                ) : (
+                  <EChartsWrapper option={engagementChartOption} height={400} />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </SectionWrapper>
+
+      {/* Section 3: Recent Content */}
+      <SectionWrapper
+        title="Recent Content"
+        description="Latest posts and engagement metrics"
+        icon={ImageIcon}
+        defaultOpen={false}
+        headerAction={
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/insights/content">View All</Link>
+          </Button>
+        }
+      >
+        {contentLoading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : content?.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Content</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Platform</TableHead>
+                <TableHead className="text-right">Reach</TableHead>
+                <TableHead className="text-right">Engagement</TableHead>
+                <TableHead className="text-right">Published</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {content.map((item) => {
+                const latestInsights = item.contentInsights[0]
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="max-w-xs truncate font-medium">
+                      {item.message ?? 'No caption'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{item.contentType}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {item.account.platform.platform === 'FACEBOOK' ? (
+                          <Facebook className="mr-1 h-3 w-3" />
+                        ) : (
+                          <Instagram className="mr-1 h-3 w-3" />
+                        )}
+                        {item.account.platform.displayName}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {latestInsights?.reach?.toLocaleString() ?? '-'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="flex items-center gap-1">
+                          <Heart className="h-3 w-3" />
+                          {latestInsights?.likes ?? 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MessageSquare className="h-3 w-3" />
+                          {latestInsights?.comments ?? 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Share2 className="h-3 w-3" />
+                          {latestInsights?.shares ?? 0}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {new Date(item.publishedAt).toLocaleDateString()}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-center text-gray-500 py-8">
+            No content yet. Sync your Facebook or Instagram content to see performance data.
+          </p>
+        )}
+      </SectionWrapper>
     </div>
-  )
-}
-
-// KPI Card Component
-function KPICard({
-  title,
-  value,
-  icon: Icon,
-  description,
-  loading,
-  positive,
-}: {
-  title: string
-  value: string
-  icon: React.ComponentType<{ className?: string }>
-  description: string
-  loading?: boolean
-  positive?: boolean
-}) {
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-4" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-8 w-20 mb-1" />
-          <Skeleton className="h-3 w-16" />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className={`text-2xl font-bold ${positive ? 'text-green-600' : ''}`}>{value}</div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
   )
 }
 
