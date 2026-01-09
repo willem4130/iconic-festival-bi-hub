@@ -272,7 +272,10 @@ export default function ConnectionsPage() {
           </Button>
         </div>
 
-        <ConnectedAccounts onAddMore={handleAddMoreAccounts} />
+        <ConnectedAccounts
+          onAddMore={handleAddMoreAccounts}
+          isAddingMore={refreshDiscoveredAccounts.isPending}
+        />
 
         {/* Sync Section */}
         {oauthStatus.data?.accounts && oauthStatus.data.accounts.length > 0 && (

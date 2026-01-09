@@ -34,12 +34,13 @@ import {
 
 interface ConnectedAccountsProps {
   onAddMore: () => void
+  isAddingMore?: boolean
 }
 
 /**
  * Displays and manages connected Meta accounts
  */
-export function ConnectedAccounts({ onAddMore }: ConnectedAccountsProps) {
+export function ConnectedAccounts({ onAddMore, isAddingMore }: ConnectedAccountsProps) {
   const { toast } = useToast()
   const utils = api.useUtils()
 
@@ -243,9 +244,13 @@ export function ConnectedAccounts({ onAddMore }: ConnectedAccountsProps) {
                 Manage your connected Facebook Pages and Instagram accounts
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={onAddMore}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add More
+            <Button variant="outline" size="sm" onClick={onAddMore} disabled={isAddingMore}>
+              {isAddingMore ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              {isAddingMore ? 'Loading...' : 'Add More'}
             </Button>
           </div>
         </CardHeader>
@@ -257,9 +262,13 @@ export function ConnectedAccounts({ onAddMore }: ConnectedAccountsProps) {
               <p className="mt-2 text-sm text-gray-500">
                 Connect your Facebook Pages and Instagram accounts to start tracking insights.
               </p>
-              <Button className="mt-4" onClick={onAddMore}>
-                <Plus className="mr-2 h-4 w-4" />
-                Connect Accounts
+              <Button className="mt-4" onClick={onAddMore} disabled={isAddingMore}>
+                {isAddingMore ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
+                {isAddingMore ? 'Loading...' : 'Connect Accounts'}
               </Button>
             </div>
           ) : (
