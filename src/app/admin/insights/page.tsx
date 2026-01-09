@@ -40,24 +40,25 @@ import { Download, FileSpreadsheet, FileText } from 'lucide-react'
 import { exportToExcel, exportToPDF, exportKPIsToPDF } from '@/lib/export'
 
 export default function InsightsPage() {
-  const { data: connectionStatus } = api.metaInsights.getConnectionStatus.useQuery()
+  // Use OAuth connection status instead of legacy env-based status
+  const { data: oauthStatus } = api.metaAuth.getConnectionStatus.useQuery()
+  const isConnected = oauthStatus?.connected ?? false
+
   const {
     data: insights,
     isLoading: insightsLoading,
     refetch: refetchInsights,
-  } = api.metaInsights.getStoredInsights.useQuery(
-    { limit: 30 },
-    { enabled: connectionStatus?.connected }
-  )
+  } = api.metaInsights.getStoredInsights.useQuery({ limit: 30 }, { enabled: isConnected })
   const { data: content, isLoading: contentLoading } = api.metaInsights.getStoredContent.useQuery(
     { limit: 10, orderBy: 'publishedAt' },
-    { enabled: connectionStatus?.connected }
+    { enabled: isConnected }
   )
 
-  const syncPageInsights = api.metaInsights.syncPageInsights.useMutation({
+  // Use OAuth sync mutations
+  const syncPageInsights = api.metaAuth.syncPageInsights.useMutation({
     onSuccess: () => refetchInsights(),
   })
-  const syncInstagramInsights = api.metaInsights.syncInstagramInsights.useMutation({
+  const syncInstagramInsights = api.metaAuth.syncInstagramInsights.useMutation({
     onSuccess: () => refetchInsights(),
   })
 
@@ -308,7 +309,7 @@ export default function InsightsPage() {
   }, [insights])
 
   // Not connected state
-  if (!connectionStatus?.connected) {
+  if (!isConnected) {
     return (
       <div className="space-y-6">
         <div>
@@ -345,12 +346,12 @@ export default function InsightsPage() {
           <p className="text-gray-500">Analytics for your Facebook and Instagram accounts</p>
         </div>
         <div className="flex items-center gap-2">
-          {connectionStatus.pageId && (
+          {oauthStatus?.accounts?.some((a) => a.platform === 'FACEBOOK') && (
             <Badge variant="outline" className="gap-1">
               <Facebook className="h-3 w-3" /> Connected
             </Badge>
           )}
-          {connectionStatus.instagramAccountId && (
+          {oauthStatus?.accounts?.some((a) => a.platform === 'INSTAGRAM') && (
             <Badge variant="outline" className="gap-1">
               <Instagram className="h-3 w-3" /> Connected
             </Badge>
@@ -454,8 +455,11 @@ export default function InsightsPage() {
             variant="outline"
             size="sm"
             onClick={() => {
-              if (connectionStatus.pageId) syncPageInsights.mutate({ days: 30 })
-              if (connectionStatus.instagramAccountId) syncInstagramInsights.mutate({ days: 30 })
+              const accounts = oauthStatus?.accounts ?? []
+              const fbAccount = accounts.find((a) => a.platform === 'FACEBOOK')
+              const igAccount = accounts.find((a) => a.platform === 'INSTAGRAM')
+              if (fbAccount) syncPageInsights.mutate({ accountId: fbAccount.id, days: 30 })
+              if (igAccount) syncInstagramInsights.mutate({ accountId: igAccount.id, days: 30 })
             }}
             disabled={isSyncing}
           >
