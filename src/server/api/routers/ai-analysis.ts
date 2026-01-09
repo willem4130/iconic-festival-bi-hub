@@ -423,6 +423,19 @@ export const aiAnalysisRouter = createTRPCRouter({
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - input.days)
 
+      // Get daily insights for overall metrics
+      const dailyInsights = await ctx.db.factAccountInsightsDaily.findMany({
+        where: {
+          date: { date: { gte: startDate } },
+          ...(platformFilter && {
+            account: { platform: { platform: platformFilter } },
+          }),
+        },
+        include: { account: { include: { platform: true } }, date: true },
+        orderBy: { date: { date: 'desc' } },
+      })
+
+      // Get content with more details
       const content = await ctx.db.dimContent.findMany({
         where: {
           publishedAt: { gte: startDate },
@@ -449,17 +462,28 @@ export const aiAnalysisRouter = createTRPCRouter({
         return bEng - aEng
       })
 
+      // Calculate overall metrics
+      const totalReach = dailyInsights.reduce((sum, i) => sum + (i.pageReach ?? 0), 0)
+      const totalEngagement = dailyInsights.reduce((sum, i) => sum + (i.pageEngagement ?? 0), 0)
+      const latestFollowers = dailyInsights[0]?.pageFollows ?? 0
+      const newFollowers = dailyInsights.reduce((sum, i) => sum + (i.pageFollowsNew ?? 0), 0)
+
       const insightsData: InsightsData = {
         platform: input.platform,
         days: input.days,
         metrics: {
-          totalReach: 0,
-          totalEngagement: 0,
-          totalFollowers: 0,
-          newFollowers: 0,
-          engagementRate: 0,
+          totalReach,
+          totalEngagement,
+          totalFollowers: latestFollowers,
+          newFollowers,
+          engagementRate: totalReach > 0 ? (totalEngagement / totalReach) * 100 : 0,
         },
-        dailyData: [],
+        dailyData: dailyInsights.map((i) => ({
+          date: i.date.date.toISOString(),
+          reach: i.pageReach ?? 0,
+          engagement: i.pageEngagement ?? 0,
+          followers: i.pageFollows ?? 0,
+        })),
         topContent: sortedContent.slice(0, 10).map((c) => ({
           id: c.id,
           type: c.contentType,
@@ -468,8 +492,18 @@ export const aiAnalysisRouter = createTRPCRouter({
             (c.contentInsights[0]?.likes ?? 0) +
             (c.contentInsights[0]?.comments ?? 0) +
             (c.contentInsights[0]?.shares ?? 0),
+          caption: c.message ?? undefined,
         })),
-        bottomContent: [],
+        bottomContent: sortedContent.slice(-10).map((c) => ({
+          id: c.id,
+          type: c.contentType,
+          reach: c.contentInsights[0]?.reach ?? 0,
+          engagement:
+            (c.contentInsights[0]?.likes ?? 0) +
+            (c.contentInsights[0]?.comments ?? 0) +
+            (c.contentInsights[0]?.shares ?? 0),
+          caption: c.message ?? undefined,
+        })),
       }
 
       return getPostingRecommendations(insightsData)

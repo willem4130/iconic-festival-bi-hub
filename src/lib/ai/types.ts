@@ -13,9 +13,52 @@ export interface PostRecommendation {
     dayOfWeek: string
     hour: number
     timezone: string
+    reasoning: string
   }
+  secondaryPostingTimes: Array<{
+    dayOfWeek: string
+    hour: number
+    engagementPotential: 'high' | 'medium' | 'low'
+  }>
+  weeklySchedule: Array<{
+    day: string
+    postCount: number
+    bestTimes: number[]
+    contentType: string
+    theme: string
+  }>
   optimalContentType: string
+  contentMix: Array<{
+    type: string
+    percentage: number
+    description: string
+    examples: string[]
+  }>
   suggestedHashtags: string[]
+  hashtagStrategy: {
+    branded: string[]
+    trending: string[]
+    niche: string[]
+    community: string[]
+    usage: string
+  }
+  captionTemplates: Array<{
+    type: string
+    template: string
+    example: string
+    tips: string[]
+  }>
+  audienceInsights: {
+    peakActivityHours: number[]
+    preferredContentTypes: string[]
+    engagementPatterns: string
+    demographicNotes: string
+  }
+  platformSpecificTips: Array<{
+    tip: string
+    impact: 'high' | 'medium' | 'low'
+    category: 'timing' | 'content' | 'engagement' | 'growth' | 'hashtags'
+  }>
   engagementPrediction: number
   confidence: number
 }
@@ -45,18 +88,51 @@ export interface ContentComparison {
 export interface StrategicAdvice {
   focus: 'growth' | 'engagement' | 'reach'
   summary: string
+  performanceGrade: 'A' | 'B' | 'C' | 'D' | 'F'
+  benchmarkComparison: {
+    vsIndustry: string
+    vsPreviousPeriod: string
+    areasAboveAverage: string[]
+    areasBelowAverage: string[]
+  }
   topOpportunities: Array<{
     title: string
     description: string
     expectedImpact: string
     effort: 'low' | 'medium' | 'high'
+    priority: number
+    steps: string[]
   }>
+  quickWins: Array<{
+    action: string
+    impact: string
+    timeToImplement: string
+  }>
+  riskAssessment: Array<{
+    risk: string
+    severity: 'low' | 'medium' | 'high'
+    mitigation: string
+  }>
+  growthProjections: {
+    conservative: string
+    moderate: string
+    aggressive: string
+    keyAssumptions: string[]
+  }
   contentCalendarSuggestions: Array<{
     dayOfWeek: string
     contentType: string
     theme: string
+    caption: string
+    bestTime: string
   }>
   competitorInsights?: string[]
+  keyMetricsToTrack: Array<{
+    metric: string
+    currentValue: string
+    targetValue: string
+    importance: string
+  }>
 }
 
 export interface NarrativeReport {

@@ -99,10 +99,10 @@ async function cacheResult(
 }
 
 // Helper to call Claude API
-async function callClaude(prompt: string): Promise<string> {
+async function callClaude(prompt: string, maxTokens = 2048): Promise<string> {
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
+    max_tokens: maxTokens,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: prompt }],
   })
@@ -195,7 +195,7 @@ export async function getStrategicAdvice(
   if (cached) return cached
 
   const prompt = buildStrategicAdvicePrompt(data, focus)
-  const response = await callClaude(prompt)
+  const response = await callClaude(prompt, 4096) // Higher token limit for detailed response
   const advice = parseJsonResponse<Omit<StrategicAdvice, 'focus'>>(response)
 
   const result = { ...advice, focus }
@@ -231,7 +231,7 @@ export async function getPostingRecommendations(data: InsightsData): Promise<Pos
   if (cached) return cached
 
   const prompt = buildPostingTimePrompt(data)
-  const response = await callClaude(prompt)
+  const response = await callClaude(prompt, 6144) // Higher token limit for comprehensive recommendations
   const recommendation = parseJsonResponse<PostRecommendation>(response)
 
   await cacheResult('posting_recommendations', inputHash, recommendation)

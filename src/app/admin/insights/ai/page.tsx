@@ -189,7 +189,71 @@ export default function AIAnalysisPage() {
           {strategicLoading ? (
             <LoadingState message="Generating strategic advice..." />
           ) : strategicAdvice ? (
-            <div className="grid gap-6">
+            <div className="space-y-6">
+              {/* Performance Overview */}
+              <div className="grid gap-4 md:grid-cols-3">
+                {/* Performance Grade */}
+                {strategicAdvice.performanceGrade && (
+                  <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/50 dark:to-purple-900/30 border-purple-200">
+                    <CardContent className="pt-6 text-center">
+                      <div className="text-xs font-medium uppercase text-purple-600 mb-2">
+                        Performance Grade
+                      </div>
+                      <div
+                        className={`text-6xl font-bold ${
+                          strategicAdvice.performanceGrade === 'A'
+                            ? 'text-green-600'
+                            : strategicAdvice.performanceGrade === 'B'
+                              ? 'text-blue-600'
+                              : strategicAdvice.performanceGrade === 'C'
+                                ? 'text-amber-600'
+                                : 'text-red-600'
+                        }`}
+                      >
+                        {strategicAdvice.performanceGrade}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Benchmark Comparison */}
+                {strategicAdvice.benchmarkComparison && (
+                  <Card className="md:col-span-2">
+                    <CardContent className="pt-6">
+                      <div className="text-xs font-medium uppercase text-muted-foreground mb-3">
+                        Benchmark Comparison
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="p-2 bg-muted/50 rounded">
+                          <div className="text-xs text-muted-foreground">vs Industry</div>
+                          <p className="text-sm">
+                            {strategicAdvice.benchmarkComparison.vsIndustry}
+                          </p>
+                        </div>
+                        <div className="p-2 bg-muted/50 rounded">
+                          <div className="text-xs text-muted-foreground">Trend</div>
+                          <p className="text-sm">
+                            {strategicAdvice.benchmarkComparison.vsPreviousPeriod}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {strategicAdvice.benchmarkComparison.areasAboveAverage?.map((area, i) => (
+                          <Badge key={i} className="bg-green-100 text-green-800 text-xs">
+                            ↑ {area}
+                          </Badge>
+                        ))}
+                        {strategicAdvice.benchmarkComparison.areasBelowAverage?.map((area, i) => (
+                          <Badge key={i} className="bg-red-100 text-red-800 text-xs">
+                            ↓ {area}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
               {/* Summary */}
               <Card>
                 <CardHeader>
@@ -202,6 +266,39 @@ export default function AIAnalysisPage() {
                   <p className="text-sm leading-relaxed">{strategicAdvice.summary}</p>
                 </CardContent>
               </Card>
+
+              {/* Quick Wins */}
+              {strategicAdvice.quickWins && strategicAdvice.quickWins.length > 0 && (
+                <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
+                      <Zap className="h-5 w-5 text-green-500" />
+                      Quick Wins
+                    </CardTitle>
+                    <CardDescription>
+                      High-impact actions you can implement immediately
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {strategicAdvice.quickWins.map((win, i) => (
+                        <div
+                          key={i}
+                          className="p-3 bg-white dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
+                        >
+                          <div className="font-medium text-sm mb-1">{win.action}</div>
+                          <div className="text-xs text-green-700 dark:text-green-300 mb-2">
+                            {win.impact}
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            ⏱ {win.timeToImplement}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Top Opportunities */}
               {strategicAdvice.topOpportunities && strategicAdvice.topOpportunities.length > 0 && (
@@ -218,12 +315,32 @@ export default function AIAnalysisPage() {
                   <CardContent>
                     <div className="space-y-4">
                       {strategicAdvice.topOpportunities.map((opp, i) => (
-                        <div key={i} className="p-4 bg-muted/50 rounded-lg space-y-2">
+                        <div key={i} className="p-4 bg-muted/50 rounded-lg space-y-3">
                           <div className="flex items-start justify-between gap-2">
-                            <h4 className="font-medium">{opp.title}</h4>
+                            <div className="flex items-center gap-2">
+                              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                                {opp.priority ?? i + 1}
+                              </span>
+                              <h4 className="font-medium">{opp.title}</h4>
+                            </div>
                             <EffortBadge effort={opp.effort} />
                           </div>
                           <p className="text-sm text-muted-foreground">{opp.description}</p>
+                          {opp.steps && opp.steps.length > 0 && (
+                            <div className="pl-4 border-l-2 border-primary/30">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">
+                                Steps to implement:
+                              </p>
+                              <ul className="text-sm space-y-1">
+                                {opp.steps.map((step, j) => (
+                                  <li key={j} className="flex items-start gap-2">
+                                    <span className="text-primary">→</span>
+                                    {step}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 text-sm">
                             <TrendingUp className="h-4 w-4 text-green-500" />
                             <span className="text-green-600 dark:text-green-400">
@@ -233,6 +350,86 @@ export default function AIAnalysisPage() {
                         </div>
                       ))}
                     </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Risk Assessment */}
+              {strategicAdvice.riskAssessment && strategicAdvice.riskAssessment.length > 0 && (
+                <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                      Risk Assessment
+                    </CardTitle>
+                    <CardDescription>Potential vulnerabilities to address</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {strategicAdvice.riskAssessment.map((risk, i) => (
+                        <div
+                          key={i}
+                          className="p-3 bg-white dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <span className="font-medium text-sm">{risk.risk}</span>
+                            <Badge
+                              variant="outline"
+                              className={
+                                risk.severity === 'high'
+                                  ? 'border-red-300 text-red-600'
+                                  : risk.severity === 'medium'
+                                    ? 'border-amber-300 text-amber-600'
+                                    : 'border-gray-300'
+                              }
+                            >
+                              {risk.severity}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            <span className="font-medium">Mitigation:</span> {risk.mitigation}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Growth Projections */}
+              {strategicAdvice.growthProjections && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-green-500" />
+                      Growth Projections
+                    </CardTitle>
+                    <CardDescription>Expected outcomes with different strategies</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="p-3 bg-gray-50 dark:bg-gray-900/30 rounded-lg">
+                        <div className="text-xs font-medium text-gray-500 mb-1">Conservative</div>
+                        <p className="text-sm">{strategicAdvice.growthProjections.conservative}</p>
+                      </div>
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border-2 border-blue-200 dark:border-blue-800">
+                        <div className="text-xs font-medium text-blue-600 mb-1">
+                          Moderate (Recommended)
+                        </div>
+                        <p className="text-sm">{strategicAdvice.growthProjections.moderate}</p>
+                      </div>
+                      <div className="p-3 bg-green-50 dark:bg-green-900/30 rounded-lg">
+                        <div className="text-xs font-medium text-green-600 mb-1">Aggressive</div>
+                        <p className="text-sm">{strategicAdvice.growthProjections.aggressive}</p>
+                      </div>
+                    </div>
+                    {strategicAdvice.growthProjections.keyAssumptions &&
+                      strategicAdvice.growthProjections.keyAssumptions.length > 0 && (
+                        <div className="mt-3 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
+                          <span className="font-medium">Key assumptions:</span>{' '}
+                          {strategicAdvice.growthProjections.keyAssumptions.join(' • ')}
+                        </div>
+                      )}
                   </CardContent>
                 </Card>
               )}
@@ -249,23 +446,59 @@ export default function AIAnalysisPage() {
                       <CardDescription>Optimal content schedule based on your data</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
                         {strategicAdvice.contentCalendarSuggestions.map((sug, i) => (
                           <div
                             key={i}
                             className="p-3 bg-muted/50 rounded-lg border border-transparent hover:border-primary/20 transition-colors"
                           >
                             <div className="font-medium text-sm mb-1">{sug.dayOfWeek}</div>
-                            <div className="text-xs text-muted-foreground space-y-1">
-                              <div className="flex items-center gap-1">
-                                <BarChart3 className="h-3 w-3" />
-                                {sug.contentType}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <ChevronRight className="h-3 w-3" />
-                                {sug.theme}
-                              </div>
+                            <Badge variant="secondary" className="text-xs mb-2">
+                              {sug.contentType}
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mb-1">{sug.theme}</p>
+                            {sug.bestTime && (
+                              <div className="text-xs text-blue-600">⏰ {sug.bestTime}</div>
+                            )}
+                            {sug.caption && (
+                              <p className="text-xs text-muted-foreground mt-2 italic line-clamp-2">
+                                "{sug.caption}"
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+              {/* Key Metrics to Track */}
+              {strategicAdvice.keyMetricsToTrack &&
+                strategicAdvice.keyMetricsToTrack.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-purple-500" />
+                        Key Metrics to Track
+                      </CardTitle>
+                      <CardDescription>Focus on these metrics to measure success</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {strategicAdvice.keyMetricsToTrack.map((metric, i) => (
+                          <div key={i} className="p-3 bg-muted/50 rounded-lg">
+                            <div className="font-medium text-sm mb-2">{metric.metric}</div>
+                            <div className="flex items-center justify-between text-sm mb-2">
+                              <span className="text-muted-foreground">Current:</span>
+                              <span className="font-medium">{metric.currentValue}</span>
                             </div>
+                            <div className="flex items-center justify-between text-sm mb-2">
+                              <span className="text-muted-foreground">Target:</span>
+                              <span className="font-medium text-green-600">
+                                {metric.targetValue}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{metric.importance}</p>
                           </div>
                         ))}
                       </div>
@@ -436,95 +669,429 @@ export default function AIAnalysisPage() {
           {recsLoading ? (
             <LoadingState message="Analyzing posting patterns..." />
           ) : postingRecs ? (
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Best Posting Time */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-blue-500" />
-                    Best Posting Time
-                  </CardTitle>
-                  <CardDescription>When your audience is most active</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-4">
-                    <div className="text-4xl font-bold text-blue-600 dark:text-blue-400">
+            <div className="space-y-6">
+              {/* Top Row - Key Stats */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {/* Best Posting Time */}
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/50 dark:to-blue-900/30 border-blue-200 dark:border-blue-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mb-2">
+                      <Clock className="h-4 w-4" />
+                      <span className="text-xs font-medium uppercase">Best Time</span>
+                    </div>
+                    <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
                       {postingRecs.bestPostingTime.dayOfWeek}
                     </div>
-                    <div className="text-2xl font-semibold mt-2">
+                    <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">
                       {formatHour(postingRecs.bestPostingTime.hour)}
                     </div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      {postingRecs.bestPostingTime.timezone}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    {postingRecs.bestPostingTime.reasoning && (
+                      <p className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-2 line-clamp-2">
+                        {postingRecs.bestPostingTime.reasoning}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
 
-              {/* Optimal Content Type */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5 text-purple-500" />
-                    Optimal Content Type
-                  </CardTitle>
-                  <CardDescription>Content format that performs best</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-4">
-                    <div className="text-4xl font-bold text-purple-600 dark:text-purple-400">
+                {/* Optimal Content Type */}
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/50 dark:to-purple-900/30 border-purple-200 dark:border-purple-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 mb-2">
+                      <BarChart3 className="h-4 w-4" />
+                      <span className="text-xs font-medium uppercase">Best Format</span>
+                    </div>
+                    <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
                       {postingRecs.optimalContentType}
                     </div>
-                    <div className="mt-4 flex items-center justify-center gap-2">
-                      <Badge variant="outline">
-                        {Math.round(postingRecs.confidence * 100)}% confidence
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <Badge variant="outline" className="mt-2 border-purple-300 text-purple-600">
+                      {Math.round(postingRecs.confidence * 100)}% confidence
+                    </Badge>
+                  </CardContent>
+                </Card>
 
-              {/* Engagement Prediction */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Target className="h-5 w-5 text-green-500" />
-                    Engagement Prediction
-                  </CardTitle>
-                  <CardDescription>Expected engagement for your next post</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-4">
-                    <div className="text-4xl font-bold text-green-600 dark:text-green-400">
+                {/* Engagement Prediction */}
+                <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/50 dark:to-green-900/30 border-green-200 dark:border-green-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
+                      <Target className="h-4 w-4" />
+                      <span className="text-xs font-medium uppercase">Predicted Engagement</span>
+                    </div>
+                    <div className="text-2xl font-bold text-green-700 dark:text-green-300">
                       {postingRecs.engagementPrediction.toLocaleString()}
                     </div>
-                    <div className="text-sm text-muted-foreground mt-1">estimated interactions</div>
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Based on optimal time + content type
+                    <p className="text-xs text-green-600/70 dark:text-green-400/70 mt-1">
+                      interactions per post
                     </p>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Suggested Hashtags */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-amber-500" />
-                    Suggested Hashtags
-                  </CardTitle>
-                  <CardDescription>High-performing tags for your niche</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {postingRecs.suggestedHashtags.map((tag, i) => (
-                      <Badge key={i} variant="secondary" className="text-sm">
-                        #{tag}
-                      </Badge>
+                {/* Secondary Times */}
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                      <Clock className="h-4 w-4" />
+                      <span className="text-xs font-medium uppercase">Alternative Times</span>
+                    </div>
+                    {postingRecs.secondaryPostingTimes?.slice(0, 3).map((time, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm py-1">
+                        <span>
+                          {time.dayOfWeek} {formatHour(time.hour)}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={
+                            time.engagementPotential === 'high'
+                              ? 'border-green-300 text-green-600'
+                              : time.engagementPotential === 'medium'
+                                ? 'border-amber-300 text-amber-600'
+                                : 'border-gray-300'
+                          }
+                        >
+                          {time.engagementPotential}
+                        </Badge>
+                      </div>
                     ))}
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Weekly Schedule */}
+              {postingRecs.weeklySchedule && postingRecs.weeklySchedule.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5 text-blue-500" />
+                      Weekly Posting Schedule
+                    </CardTitle>
+                    <CardDescription>
+                      Recommended posting plan for maximum engagement
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+                      {postingRecs.weeklySchedule.map((day, i) => (
+                        <div
+                          key={i}
+                          className="p-3 rounded-lg bg-muted/50 border hover:border-primary/30 transition-colors"
+                        >
+                          <div className="font-semibold text-sm mb-1">{day.day}</div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            {day.postCount} post{day.postCount > 1 ? 's' : ''}
+                          </div>
+                          <div className="space-y-1">
+                            <Badge variant="secondary" className="text-xs w-full justify-center">
+                              {day.contentType}
+                            </Badge>
+                            <div className="text-xs text-center text-muted-foreground">
+                              {day.bestTimes?.map((h) => formatHour(h)).join(', ')}
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                            {day.theme}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Content Mix */}
+              {postingRecs.contentMix && postingRecs.contentMix.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-purple-500" />
+                      Optimal Content Mix
+                    </CardTitle>
+                    <CardDescription>Recommended distribution of content types</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      {postingRecs.contentMix.map((content, i) => {
+                        const colors = [
+                          'bg-blue-500',
+                          'bg-purple-500',
+                          'bg-amber-500',
+                          'bg-green-500',
+                        ]
+                        return (
+                          <div key={i} className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{content.type}</span>
+                              <span className="text-2xl font-bold">{content.percentage}%</span>
+                            </div>
+                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${colors[i % colors.length]} rounded-full transition-all`}
+                                style={{ width: `${content.percentage}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-muted-foreground">{content.description}</p>
+                            {content.examples && content.examples.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {content.examples.slice(0, 2).map((ex, j) => (
+                                  <Badge key={j} variant="outline" className="text-xs">
+                                    {ex}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Hashtag Strategy */}
+              {postingRecs.hashtagStrategy && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-amber-500" />
+                      Hashtag Strategy
+                    </CardTitle>
+                    <CardDescription>Organized hashtag approach for maximum reach</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <div>
+                        <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-amber-500" />
+                          Branded
+                        </h4>
+                        <div className="flex flex-wrap gap-1">
+                          {postingRecs.hashtagStrategy.branded?.map((tag, i) => (
+                            <Badge key={i} className="bg-amber-100 text-amber-800 text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-green-500" />
+                          Trending
+                        </h4>
+                        <div className="flex flex-wrap gap-1">
+                          {postingRecs.hashtagStrategy.trending?.map((tag, i) => (
+                            <Badge key={i} className="bg-green-100 text-green-800 text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-blue-500" />
+                          Niche
+                        </h4>
+                        <div className="flex flex-wrap gap-1">
+                          {postingRecs.hashtagStrategy.niche?.map((tag, i) => (
+                            <Badge key={i} className="bg-blue-100 text-blue-800 text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm mb-2 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-purple-500" />
+                          Community
+                        </h4>
+                        <div className="flex flex-wrap gap-1">
+                          {postingRecs.hashtagStrategy.community?.map((tag, i) => (
+                            <Badge key={i} className="bg-purple-100 text-purple-800 text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {postingRecs.hashtagStrategy.usage && (
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">Pro Tip: </span>
+                          {postingRecs.hashtagStrategy.usage}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Caption Templates */}
+              {postingRecs.captionTemplates && postingRecs.captionTemplates.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-500" />
+                      Caption Templates
+                    </CardTitle>
+                    <CardDescription>Ready-to-use caption structures</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {postingRecs.captionTemplates.map((template, i) => (
+                        <div key={i} className="p-4 bg-muted/50 rounded-lg space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">{template.type}</Badge>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Template:</p>
+                            <code className="text-xs bg-background px-2 py-1 rounded">
+                              {template.template}
+                            </code>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Example:</p>
+                            <p className="text-sm whitespace-pre-line bg-background p-2 rounded border">
+                              {template.example}
+                            </p>
+                          </div>
+                          {template.tips && template.tips.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {template.tips.map((tip, j) => (
+                                <span
+                                  key={j}
+                                  className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded"
+                                >
+                                  {tip}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Audience Insights */}
+              {postingRecs.audienceInsights && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-5 w-5 text-green-500" />
+                      Audience Insights
+                    </CardTitle>
+                    <CardDescription>Understanding your audience behavior</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <h4 className="font-medium text-sm mb-2">Peak Activity Hours</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {postingRecs.audienceInsights.peakActivityHours?.map((hour, i) => (
+                            <Badge key={i} variant="outline">
+                              {formatHour(hour)}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-sm mb-2">Preferred Content</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {postingRecs.audienceInsights.preferredContentTypes?.map((type, i) => (
+                            <Badge key={i} variant="secondary">
+                              {type}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {postingRecs.audienceInsights.engagementPatterns && (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                        <h4 className="font-medium text-sm mb-1 text-blue-800 dark:text-blue-200">
+                          Engagement Patterns
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          {postingRecs.audienceInsights.engagementPatterns}
+                        </p>
+                      </div>
+                    )}
+                    {postingRecs.audienceInsights.demographicNotes && (
+                      <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg">
+                        <h4 className="font-medium text-sm mb-1 text-purple-800 dark:text-purple-200">
+                          Demographic Notes
+                        </h4>
+                        <p className="text-sm text-purple-700 dark:text-purple-300">
+                          {postingRecs.audienceInsights.demographicNotes}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Platform-Specific Tips */}
+              {postingRecs.platformSpecificTips && postingRecs.platformSpecificTips.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Lightbulb className="h-5 w-5 text-amber-500" />
+                      Platform Tips
+                    </CardTitle>
+                    <CardDescription>Actionable tips to boost performance</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {postingRecs.platformSpecificTips.map((tip, i) => {
+                        const categoryColors: Record<string, string> = {
+                          timing: 'bg-blue-100 text-blue-800',
+                          content: 'bg-purple-100 text-purple-800',
+                          engagement: 'bg-green-100 text-green-800',
+                          growth: 'bg-amber-100 text-amber-800',
+                          hashtags: 'bg-pink-100 text-pink-800',
+                        }
+                        const impactColors: Record<string, string> = {
+                          high: 'text-green-600',
+                          medium: 'text-amber-600',
+                          low: 'text-gray-500',
+                        }
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
+                          >
+                            <div
+                              className={`text-lg ${impactColors[tip.impact] ?? 'text-gray-500'}`}
+                            >
+                              {tip.impact === 'high' ? '🔥' : tip.impact === 'medium' ? '⭐' : '💡'}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm">{tip.tip}</p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${categoryColors[tip.category] ?? ''}`}
+                                >
+                                  {tip.category}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${
+                                    tip.impact === 'high'
+                                      ? 'border-green-300 text-green-600'
+                                      : tip.impact === 'medium'
+                                        ? 'border-amber-300 text-amber-600'
+                                        : ''
+                                  }`}
+                                >
+                                  {tip.impact} impact
+                                </Badge>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           ) : (
             <EmptyState message="Unable to generate recommendations. Make sure you have content synced." />
