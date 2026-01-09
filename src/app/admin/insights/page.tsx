@@ -27,6 +27,7 @@ import {
   AlertCircle,
   Facebook,
   Instagram,
+  ImageIcon,
 } from 'lucide-react'
 import type { EChartsOption } from 'echarts'
 import Link from 'next/link'
@@ -38,21 +39,40 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Download, FileSpreadsheet, FileText } from 'lucide-react'
 import { exportToExcel, exportToPDF, exportKPIsToPDF } from '@/lib/export'
+import { useInsights, PlatformToggle } from '@/components/insights'
 
 export default function InsightsPage() {
+  const { platform, days } = useInsights()
+
   // Use OAuth connection status instead of legacy env-based status
   const { data: oauthStatus } = api.metaAuth.getConnectionStatus.useQuery()
   const isConnected = oauthStatus?.connected ?? false
 
   const {
-    data: insights,
+    data: allInsights,
     isLoading: insightsLoading,
     refetch: refetchInsights,
-  } = api.metaInsights.getStoredInsights.useQuery({ limit: 30 }, { enabled: isConnected })
-  const { data: content, isLoading: contentLoading } = api.metaInsights.getStoredContent.useQuery(
-    { limit: 10, orderBy: 'publishedAt' },
-    { enabled: isConnected }
-  )
+  } = api.metaInsights.getStoredInsights.useQuery({ limit: days }, { enabled: isConnected })
+  const { data: allContent, isLoading: contentLoading } =
+    api.metaInsights.getStoredContent.useQuery(
+      { limit: 10, orderBy: 'publishedAt' },
+      { enabled: isConnected }
+    )
+
+  // Filter insights and content based on selected platform
+  const insights = useMemo(() => {
+    if (!allInsights) return []
+    if (platform === 'all') return allInsights
+    const platformFilter = platform === 'facebook' ? 'FACEBOOK' : 'INSTAGRAM'
+    return allInsights.filter((i) => i.account.platform.platform === platformFilter)
+  }, [allInsights, platform])
+
+  const content = useMemo(() => {
+    if (!allContent) return []
+    if (platform === 'all') return allContent
+    const platformFilter = platform === 'facebook' ? 'FACEBOOK' : 'INSTAGRAM'
+    return allContent.filter((c) => c.account.platform.platform === platformFilter)
+  }, [allContent, platform])
 
   // Use OAuth sync mutations
   const syncPageInsights = api.metaAuth.syncPageInsights.useMutation({
@@ -350,33 +370,43 @@ export default function InsightsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Social Media Insights</h1>
-          <p className="text-gray-500">Analytics for your Facebook and Instagram accounts</p>
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 mb-6 bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Social Media Insights</h1>
+            <p className="text-muted-foreground">
+              Analytics for your Facebook and Instagram accounts
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <PlatformToggle />
+            {oauthStatus?.accounts?.some((a) => a.platform === 'FACEBOOK') && (
+              <Badge variant="outline" className="gap-1 hidden lg:flex">
+                <Facebook className="h-3 w-3" /> Connected
+              </Badge>
+            )}
+            {oauthStatus?.accounts?.some((a) => a.platform === 'INSTAGRAM') && (
+              <Badge variant="outline" className="gap-1 hidden lg:flex">
+                <Instagram className="h-3 w-3" /> Connected
+              </Badge>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {oauthStatus?.accounts?.some((a) => a.platform === 'FACEBOOK') && (
-            <Badge variant="outline" className="gap-1">
-              <Facebook className="h-3 w-3" /> Connected
-            </Badge>
-          )}
-          {oauthStatus?.accounts?.some((a) => a.platform === 'INSTAGRAM') && (
-            <Badge variant="outline" className="gap-1">
-              <Instagram className="h-3 w-3" /> Connected
-            </Badge>
-          )}
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/insights/content">
+              <ImageIcon className="mr-2 h-4 w-4" />
+              Content
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/admin/insights/comparison">Compare</Link>
+          </Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin/insights/calendar">Calendar</Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/comparison">Compare Platforms</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/ads">Ad Performance</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/insights/weather">Weather</Link>
+            <Link href="/admin/insights/ads">Ads</Link>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
