@@ -14,6 +14,7 @@ import { sentimentRouter } from '@/server/api/routers/sentiment'
 import { socialListeningRouter } from '@/server/api/routers/social-listening'
 import { correlationsRouter } from '@/server/api/routers/correlations'
 import { metaAuthRouter } from '@/server/api/routers/meta-auth'
+import { aiAnalysisRouter } from '@/server/api/routers/ai-analysis'
 
 /**
  * This is the primary router for your server.
@@ -35,6 +36,7 @@ export const appRouter = createTRPCRouter({
   socialListening: socialListeningRouter,
   correlations: correlationsRouter,
   metaAuth: metaAuthRouter,
+  aiAnalysis: aiAnalysisRouter,
 })
 
 // Export type definition of API

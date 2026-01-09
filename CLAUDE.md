@@ -100,33 +100,33 @@ npm run db:push && npm run db:generate && npm run typecheck
 - Daily insights → `FactAccountInsightsDaily`
 - Posts → `DimContent` + `FactContentInsights`
 
-## Current Enhancement Roadmap
+## Enhancement Roadmap
 
-### Phase 1: Content Sync (In Progress)
+### Phase 1: Content Sync - COMPLETE
 
-- [ ] Sync FB posts + IG media with engagement stats
-- [ ] Store in DimContent + FactContentInsights
+- [x] Sync FB posts + IG media with engagement stats
+- [x] Store in DimContent + FactContentInsights
 
-### Phase 2: Enhanced Dashboards
+### Phase 2: Enhanced Dashboards - COMPLETE
 
-- [ ] Platform toggle (FB/IG/Both)
-- [ ] Content grid with engagement
-- [ ] New Content Performance page
+- [x] Platform toggle (FB/IG/Both) with URL persistence
+- [x] Content grid with thumbnails + engagement
+- [x] New Content Performance page (`/admin/insights/content`)
 
-### Phase 3: Claude AI Analysis
+### Phase 3: AI Analysis - IN PROGRESS
 
-- [ ] Pattern detection, KPI analysis
-- [ ] Recommendations engine
-- [ ] Weekly AI reports
+- [ ] Claude AI integration (`src/lib/ai/`)
+- [ ] Quick insights for Overview page
+- [ ] Post recommendations + performance analysis
+- [ ] Monthly narrative reports
 
-### Phase 4: Competitor Tracking
+### Phase 4: Overview Restructure - PLANNED
 
-- [ ] Track competitor accounts
-- [ ] AI suggestions for inspiration
-- [ ] Performance comparison
+- [ ] 3 collapsible sections (Executive Summary, Dashboard Hub, Narrative)
+- [ ] KPI cards with sparklines
+- [ ] Top/Bottom 5 performers
 
-### Phase 5: Weeztix Integration
+### Phase 5: Content Comparison + AI Page - PLANNED
 
-- [ ] Link social metrics to ticket sales
-- [ ] Attribution tracking
-- [ ] Unified data lake
+- [ ] Post-to-post comparison (`/admin/insights/content/compare`)
+- [ ] Dedicated AI analysis page (`/admin/insights/ai`)

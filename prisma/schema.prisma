@@ -1787,3 +1787,21 @@ model FactBrandMention {
   @@index([requiresResponse])
   @@index([isInfluencer])
 }
+
+// ==========================================
+// AI ANALYSIS CACHE
+// ==========================================
+
+// ai_analysis_cache: Cache for Claude AI analysis results
+model AiAnalysisCache {
+  id            String   @id @default(cuid())
+  analysisType  String   // 'quick_insights', 'content_analysis', 'narrative_report', etc.
+  inputHash     String   // MD5 hash of input parameters for cache key
+  result        Json     // Cached AI response
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime // TTL for cache invalidation
+
+  @@unique([analysisType, inputHash])
+  @@index([expiresAt])
+  @@index([analysisType])
+}
