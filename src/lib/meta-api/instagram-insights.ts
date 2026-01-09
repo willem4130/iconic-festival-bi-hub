@@ -99,11 +99,11 @@ export type InstagramAccountMetric =
   | 'get_directions_clicks'
   | 'website_clicks'
 
+// Note: profile_views, website_clicks require metric_type=total_value
+// Using only metrics that work with time_series period=day
 export const DEFAULT_INSTAGRAM_ACCOUNT_METRICS: InstagramAccountMetric[] = [
   'reach',
-  'profile_views',
   'follower_count',
-  'website_clicks',
 ]
 
 export interface InstagramInsightsOptions {

@@ -854,15 +854,11 @@ async function storeInstagramInsightsOAuth(
         accountId,
         dateId: dimDate.id,
         pageReach: metrics.get('reach') ?? null,
-        profileViews: metrics.get('profile_views') ?? null,
         pageFollows: metrics.get('follower_count') ?? null,
-        websiteClicks: metrics.get('website_clicks') ?? null,
       },
       update: {
         pageReach: metrics.get('reach') ?? null,
-        profileViews: metrics.get('profile_views') ?? null,
         pageFollows: metrics.get('follower_count') ?? null,
-        websiteClicks: metrics.get('website_clicks') ?? null,
       },
     })
 
