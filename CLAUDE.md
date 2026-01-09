@@ -134,7 +134,7 @@ npm run db:push && npm run db:generate && npm run typecheck
 - [x] Performance badges on content cards (High/Low)
 - [x] Top/Bottom content rankings
 
-### Phase 6: Content Comparison + Dedicated AI Page - PLANNED
+### Phase 6: Content Comparison + Dedicated AI Page - COMPLETE
 
-- [ ] Post-to-post comparison (`/admin/insights/content/compare`)
-- [ ] Dedicated AI analysis page (`/admin/insights/ai`)
+- [x] Post-to-post comparison (`/admin/insights/content/compare`)
+- [x] Dedicated AI analysis page (`/admin/insights/ai`)
