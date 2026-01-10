@@ -15,7 +15,6 @@ import { socialListeningRouter } from '@/server/api/routers/social-listening'
 import { correlationsRouter } from '@/server/api/routers/correlations'
 import { metaAuthRouter } from '@/server/api/routers/meta-auth'
 import { aiAnalysisRouter } from '@/server/api/routers/ai-analysis'
-import { weeztixRouter } from '@/server/api/routers/weeztix'
 
 /**
  * This is the primary router for your server.
@@ -38,7 +37,6 @@ export const appRouter = createTRPCRouter({
   correlations: correlationsRouter,
   metaAuth: metaAuthRouter,
   aiAnalysis: aiAnalysisRouter,
-  weeztix: weeztixRouter,
 })
 
 // Export type definition of API

@@ -244,23 +244,28 @@ The AI page shows step-by-step progress during analysis:
 ### Phase 9: Enhanced Features - COMPLETE
 
 - [x] ECharts heatmap for weekly posting schedule in AI recommendations
-- [x] Weeztix ticketing integration with OAuth, database models, tRPC router, and dashboard
 
 ### Phase 10: Future Enhancements
 
-- [ ] Weeztix webhook integration for real-time order updates
+- [ ] Merge UI with Weeztix project for unified analytics experience
 - [ ] Correlation analysis between social media engagement and ticket sales
-- [ ] AI-powered ticket sales predictions based on content performance
+- [ ] Cross-platform reporting (social + ticketing)
 
 ## External API Integrations
 
-| Feature        | Provider       | Router                | Database Tables                                            |
-| -------------- | -------------- | --------------------- | ---------------------------------------------------------- |
-| Ad Performance | Meta Ads API   | `meta-insights.ts`    | `DimAdCampaign`, `FactAdInsightsDaily`                     |
-| Attribution    | Short.io       | `link-tracking.ts`    | `DimLink`, `FactLinkClicks`, `AggAttributionDaily`         |
-| Weather        | OpenWeatherMap | `meta-insights.ts`    | `FactWeatherDaily`                                         |
-| Sentiment      | AWS Comprehend | `sentiment.ts`        | `FactCommentSentiment`, `AggSentimentDaily`                |
-| Hashtags       | RiteTag API    | `hashtags.ts`         | `DimHashtag`, `FactHashtagTrends`                          |
-| Mentions       | Brand24        | `social-listening.ts` | `FactBrandMention`, `DimMentionSource`                     |
-| AI Analysis    | Claude API     | `ai-analysis.ts`      | `AiAnalysisCache`, `SavedAiReport`                         |
-| Ticketing      | Weeztix API    | `weeztix.ts`          | `WeeztixConnection`, `DimWeeztixEvent`, `FactWeeztixOrder` |
+| Feature        | Provider       | Router                | Database Tables                                    |
+| -------------- | -------------- | --------------------- | -------------------------------------------------- |
+| Ad Performance | Meta Ads API   | `meta-insights.ts`    | `DimAdCampaign`, `FactAdInsightsDaily`             |
+| Attribution    | Short.io       | `link-tracking.ts`    | `DimLink`, `FactLinkClicks`, `AggAttributionDaily` |
+| Weather        | OpenWeatherMap | `meta-insights.ts`    | `FactWeatherDaily`                                 |
+| Sentiment      | AWS Comprehend | `sentiment.ts`        | `FactCommentSentiment`, `AggSentimentDaily`        |
+| Hashtags       | RiteTag API    | `hashtags.ts`         | `DimHashtag`, `FactHashtagTrends`                  |
+| Mentions       | Brand24        | `social-listening.ts` | `FactBrandMention`, `DimMentionSource`             |
+| AI Analysis    | Claude API     | `ai-analysis.ts`      | `AiAnalysisCache`, `SavedAiReport`                 |
+
+## Related Projects
+
+| Project  | Path                                         | Purpose             | URL                       |
+| -------- | -------------------------------------------- | ------------------- | ------------------------- |
+| Weeztix  | `/Users/willemvandenberg/Dev/Iconic/Weeztix` | Ticketing analytics | iconic-weeztix.vercel.app |
+| Facebook | (this project)                               | Social media BI     | iconic-bi-hub.vercel.app  |
