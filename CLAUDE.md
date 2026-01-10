@@ -233,10 +233,34 @@ The AI page shows step-by-step progress during analysis:
 - [x] Loading status tracker with step-by-step progress
 - [x] Sidebar restructured like Weeztix project
 
-### Phase 8: Future Enhancements
+### Phase 8: Production Features - COMPLETE
 
-- [ ] Connect Advanced Analytics to real data
-- [ ] Enhance Social Listening pages
-- [ ] Add ECharts heatmap for weekly schedule
-- [ ] Export AI reports to PDF
-- [ ] Weeztix ticketing integration
+- [x] Advanced Analytics with real data (Ads, Attribution, Correlations, Weather)
+- [x] Social Listening with external APIs (Sentiment, Hashtags, Mentions)
+- [x] Export AI reports to PDF with jsPDF
+- [x] Save AI reports to database with filtering/pagination
+- [x] Focus selector cards for AI analysis types
+
+### Phase 9: Enhanced Features - COMPLETE
+
+- [x] ECharts heatmap for weekly posting schedule in AI recommendations
+- [x] Weeztix ticketing integration with OAuth, database models, tRPC router, and dashboard
+
+### Phase 10: Future Enhancements
+
+- [ ] Weeztix webhook integration for real-time order updates
+- [ ] Correlation analysis between social media engagement and ticket sales
+- [ ] AI-powered ticket sales predictions based on content performance
+
+## External API Integrations
+
+| Feature        | Provider       | Router                | Database Tables                                            |
+| -------------- | -------------- | --------------------- | ---------------------------------------------------------- |
+| Ad Performance | Meta Ads API   | `meta-insights.ts`    | `DimAdCampaign`, `FactAdInsightsDaily`                     |
+| Attribution    | Short.io       | `link-tracking.ts`    | `DimLink`, `FactLinkClicks`, `AggAttributionDaily`         |
+| Weather        | OpenWeatherMap | `meta-insights.ts`    | `FactWeatherDaily`                                         |
+| Sentiment      | AWS Comprehend | `sentiment.ts`        | `FactCommentSentiment`, `AggSentimentDaily`                |
+| Hashtags       | RiteTag API    | `hashtags.ts`         | `DimHashtag`, `FactHashtagTrends`                          |
+| Mentions       | Brand24        | `social-listening.ts` | `FactBrandMention`, `DimMentionSource`                     |
+| AI Analysis    | Claude API     | `ai-analysis.ts`      | `AiAnalysisCache`, `SavedAiReport`                         |
+| Ticketing      | Weeztix API    | `weeztix.ts`          | `WeeztixConnection`, `DimWeeztixEvent`, `FactWeeztixOrder` |

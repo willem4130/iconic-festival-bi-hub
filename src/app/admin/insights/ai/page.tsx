@@ -29,6 +29,7 @@ import {
   FocusSelector,
   ReportActions,
   SavedReportsSheet,
+  PostingHeatmap,
   type FocusArea,
 } from '@/components/insights/ai'
 import { useToast } from '@/hooks/use-toast'
@@ -879,6 +880,15 @@ export default function AIAnalysisPage() {
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Posting Heatmap */}
+              {postingRecs.weeklySchedule && postingRecs.weeklySchedule.length > 0 && (
+                <PostingHeatmap
+                  weeklySchedule={postingRecs.weeklySchedule}
+                  bestPostingTime={postingRecs.bestPostingTime}
+                  secondaryPostingTimes={postingRecs.secondaryPostingTimes}
+                />
               )}
 
               {/* Content Mix */}

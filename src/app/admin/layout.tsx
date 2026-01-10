@@ -26,6 +26,7 @@ import {
   MessageSquare,
   AtSign,
   TrendingUp,
+  Ticket,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -66,6 +67,7 @@ const navItems: NavItem[] = [
     href: '/admin/insights/ads',
     icon: TrendingUp,
     children: [
+      { title: 'Ticketing', href: '/admin/insights/ticketing', icon: Ticket },
       { title: 'Ad Performance', href: '/admin/insights/ads', icon: DollarSign },
       { title: 'Attribution', href: '/admin/insights/attribution', icon: Link2 },
       { title: 'Correlations', href: '/admin/insights/correlations', icon: TrendingUp },
@@ -111,6 +113,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       '/admin/insights/calendar',
     ]
     const advancedPages = [
+      '/admin/insights/ticketing',
       '/admin/insights/ads',
       '/admin/insights/attribution',
       '/admin/insights/correlations',
