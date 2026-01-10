@@ -212,24 +212,42 @@ export default function AIAnalysisPage() {
 
         {/* Strategic Advice Tab */}
         <TabsContent value="strategic" className="space-y-6 mt-6">
-          {/* Focus Selector - Large Cards */}
+          {/* Controls & Actions Bar */}
           <Card>
             <CardContent className="pt-6">
-              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-                <FocusSelector
-                  value={focusArea}
-                  onChange={setFocusArea}
-                  disabled={strategicLoading}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => refetchStrategic()}
-                  className="self-start sm:self-auto"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                  <FocusSelector
+                    value={focusArea}
+                    onChange={setFocusArea}
+                    disabled={strategicLoading}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchStrategic()}
+                    className="self-start sm:self-auto"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+                {/* Prominent Actions */}
+                {strategicAdvice && !strategicLoading && (
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <p className="text-sm text-muted-foreground">
+                      Analysis ready - save or export your report
+                    </p>
+                    <ReportActions
+                      reportType="strategic"
+                      platform={platform}
+                      data={strategicAdvice}
+                      focusArea={focusArea}
+                      onSave={handleSaveReport}
+                      variant="prominent"
+                    />
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -581,17 +599,6 @@ export default function AIAnalysisPage() {
                     </CardContent>
                   </Card>
                 )}
-
-              {/* Save/Export Actions */}
-              <div className="flex justify-end pt-4 border-t">
-                <ReportActions
-                  reportType="strategic"
-                  platform={platform}
-                  data={strategicAdvice}
-                  focusArea={focusArea}
-                  onSave={handleSaveReport}
-                />
-              </div>
             </div>
           ) : (
             <EmptyState message="Unable to generate strategic advice. Make sure you have content synced." />
@@ -600,22 +607,45 @@ export default function AIAnalysisPage() {
 
         {/* Monthly Report Tab */}
         <TabsContent value="report" className="space-y-6 mt-6">
-          {/* Month Selector */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Report for:</span>
-              <input
-                type="month"
-                value={reportMonth}
-                onChange={(e) => setReportMonth(e.target.value)}
-                className="px-3 py-2 border rounded-md text-sm bg-background"
-              />
-            </div>
-            <Button variant="outline" size="sm" onClick={() => refetchReport()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Regenerate
-            </Button>
-          </div>
+          {/* Controls & Actions Bar */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Report for:</span>
+                    <input
+                      type="month"
+                      value={reportMonth}
+                      onChange={(e) => setReportMonth(e.target.value)}
+                      className="px-3 py-2 border rounded-md text-sm bg-background"
+                    />
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => refetchReport()}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Regenerate
+                  </Button>
+                </div>
+                {/* Prominent Actions */}
+                {narrativeReport && !reportLoading && (
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <p className="text-sm text-muted-foreground">
+                      Report ready - save or export as PDF
+                    </p>
+                    <ReportActions
+                      reportType="report"
+                      platform={platform}
+                      data={narrativeReport}
+                      month={month}
+                      year={year}
+                      onSave={handleSaveReport}
+                      variant="prominent"
+                    />
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {reportLoading ? (
             <LoadingState message="Generating monthly report..." analysisType="report" />
@@ -720,18 +750,6 @@ export default function AIAnalysisPage() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* Save/Export Actions */}
-              <div className="flex justify-end pt-4 border-t">
-                <ReportActions
-                  reportType="report"
-                  platform={platform}
-                  data={narrativeReport}
-                  month={month}
-                  year={year}
-                  onSave={handleSaveReport}
-                />
-              </div>
             </div>
           ) : (
             <EmptyState message="Unable to generate report. Make sure you have data for the selected month." />
@@ -740,12 +758,38 @@ export default function AIAnalysisPage() {
 
         {/* Posting Recommendations Tab */}
         <TabsContent value="recommendations" className="space-y-6 mt-6">
-          <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => refetchRecs()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
+          {/* Controls & Actions Bar */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Posting recommendations based on 30 days of data
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => refetchRecs()}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                </div>
+                {/* Prominent Actions */}
+                {postingRecs && !recsLoading && (
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <p className="text-sm text-muted-foreground">
+                      Tips ready - save or export as PDF
+                    </p>
+                    <ReportActions
+                      reportType="recommendations"
+                      platform={platform}
+                      data={postingRecs}
+                      days={30}
+                      onSave={handleSaveReport}
+                      variant="prominent"
+                    />
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {recsLoading ? (
             <LoadingState message="Analyzing posting patterns..." analysisType="recommendations" />
@@ -1187,17 +1231,6 @@ export default function AIAnalysisPage() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* Save/Export Actions */}
-              <div className="flex justify-end pt-4 border-t">
-                <ReportActions
-                  reportType="recommendations"
-                  platform={platform}
-                  data={postingRecs}
-                  days={30}
-                  onSave={handleSaveReport}
-                />
-              </div>
             </div>
           ) : (
             <EmptyState message="Unable to generate recommendations. Make sure you have content synced." />

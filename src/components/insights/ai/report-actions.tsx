@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, FileDown } from 'lucide-react'
+import { Save, FileDown, Check, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SaveReportDialog } from './save-report-dialog'
 import {
@@ -10,6 +10,7 @@ import {
   exportPostingRecsToPDF,
 } from '@/lib/export/ai-reports'
 import type { StrategicAdvice, NarrativeReport, PostRecommendation } from '@/lib/ai/types'
+import { cn } from '@/lib/utils'
 
 type ReportType = 'strategic' | 'report' | 'recommendations'
 
@@ -39,6 +40,9 @@ interface ReportActionsProps {
     content: any
   }) => Promise<void>
   disabled?: boolean
+  // UX options
+  variant?: 'default' | 'prominent'
+  showLabels?: boolean
 }
 
 export function ReportActions({
@@ -51,9 +55,12 @@ export function ReportActions({
   days,
   onSave,
   disabled,
+  variant = 'default',
+  showLabels = true,
 }: ReportActionsProps) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
 
   const getDefaultTitle = () => {
     const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -153,28 +160,56 @@ export function ReportActions({
       days,
       content: data,
     })
+    // Show saved feedback
+    setJustSaved(true)
+    setTimeout(() => setJustSaved(false), 2000)
   }
+
+  const isProminent = variant === 'prominent'
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className={cn('flex items-center gap-2', isProminent && 'gap-3')}>
         <Button
-          variant="outline"
-          size="sm"
+          variant={isProminent ? 'default' : 'outline'}
+          size={isProminent ? 'default' : 'sm'}
           onClick={() => setSaveDialogOpen(true)}
-          disabled={disabled}
+          disabled={disabled || justSaved}
+          className={cn(
+            isProminent && 'bg-green-600 hover:bg-green-700 text-white',
+            justSaved && 'bg-green-500 hover:bg-green-500'
+          )}
         >
-          <Save className="mr-2 h-4 w-4" />
-          Save
+          {justSaved ? (
+            <>
+              <Check className={cn('h-4 w-4', showLabels && 'mr-2')} />
+              {showLabels && 'Saved!'}
+            </>
+          ) : (
+            <>
+              <Save className={cn('h-4 w-4', showLabels && 'mr-2')} />
+              {showLabels && 'Save Report'}
+            </>
+          )}
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size={isProminent ? 'default' : 'sm'}
           onClick={handleExportPDF}
           disabled={disabled || exporting}
+          className={isProminent ? 'border-2' : ''}
         >
-          <FileDown className="mr-2 h-4 w-4" />
-          {exporting ? 'Exporting...' : 'Export PDF'}
+          {exporting ? (
+            <>
+              <Loader2 className={cn('h-4 w-4 animate-spin', showLabels && 'mr-2')} />
+              {showLabels && 'Exporting...'}
+            </>
+          ) : (
+            <>
+              <FileDown className={cn('h-4 w-4', showLabels && 'mr-2')} />
+              {showLabels && 'Export PDF'}
+            </>
+          )}
         </Button>
       </div>
 
