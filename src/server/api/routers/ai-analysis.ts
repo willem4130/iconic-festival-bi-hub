@@ -88,7 +88,16 @@ export const aiAnalysisRouter = createTRPCRouter({
       const totalReach = dailyInsights.reduce((sum, i) => sum + (i.pageReach ?? 0), 0)
       const totalEngagement = dailyInsights.reduce((sum, i) => sum + (i.pageEngagement ?? 0), 0)
       const latestFollowers = dailyInsights[0]?.pageFollows ?? 0
-      const newFollowers = dailyInsights.reduce((sum, i) => sum + (i.pageFollowsNew ?? 0), 0)
+
+      // Calculate newFollowers from daily pageFollows delta (since pageFollowsNew is not populated)
+      // Sort by date to get oldest and newest follower counts
+      const sortedByDate = [...dailyInsights].sort(
+        (a, b) => a.date.date.getTime() - b.date.date.getTime()
+      )
+      const oldestFollowers = sortedByDate.find((i) => i.pageFollows !== null)?.pageFollows ?? 0
+      const newestFollowers =
+        sortedByDate.reverse().find((i) => i.pageFollows !== null)?.pageFollows ?? 0
+      const newFollowers = Math.max(0, newestFollowers - oldestFollowers)
 
       // Build insights data
       const insightsData: InsightsData = {
@@ -267,6 +276,17 @@ export const aiAnalysisRouter = createTRPCRouter({
       const totalReach = dailyInsights.reduce((sum, i) => sum + (i.pageReach ?? 0), 0)
       const totalEngagement = dailyInsights.reduce((sum, i) => sum + (i.pageEngagement ?? 0), 0)
 
+      // Calculate newFollowers from daily pageFollows delta
+      const sortedByDateForFollowers = [...dailyInsights].sort(
+        (a, b) => a.date.date.getTime() - b.date.date.getTime()
+      )
+      const oldestFollowersStrategic =
+        sortedByDateForFollowers.find((i) => i.pageFollows !== null)?.pageFollows ?? 0
+      const newestFollowersStrategic =
+        [...sortedByDateForFollowers].reverse().find((i) => i.pageFollows !== null)?.pageFollows ??
+        0
+      const newFollowersStrategic = Math.max(0, newestFollowersStrategic - oldestFollowersStrategic)
+
       const insightsData: InsightsData = {
         platform: input.platform,
         days: input.days,
@@ -274,7 +294,7 @@ export const aiAnalysisRouter = createTRPCRouter({
           totalReach,
           totalEngagement,
           totalFollowers: dailyInsights[0]?.pageFollows ?? 0,
-          newFollowers: dailyInsights.reduce((sum, i) => sum + (i.pageFollowsNew ?? 0), 0),
+          newFollowers: newFollowersStrategic,
           engagementRate: totalReach > 0 ? (totalEngagement / totalReach) * 100 : 0,
         },
         dailyData: dailyInsights.map((i) => ({
@@ -365,6 +385,16 @@ export const aiAnalysisRouter = createTRPCRouter({
       const totalReach = dailyInsights.reduce((sum, i) => sum + (i.pageReach ?? 0), 0)
       const totalEngagement = dailyInsights.reduce((sum, i) => sum + (i.pageEngagement ?? 0), 0)
 
+      // Calculate newFollowers from daily pageFollows delta
+      const sortedByDateForReport = [...dailyInsights].sort(
+        (a, b) => a.date.date.getTime() - b.date.date.getTime()
+      )
+      const oldestFollowersReport =
+        sortedByDateForReport.find((i) => i.pageFollows !== null)?.pageFollows ?? 0
+      const newestFollowersReport =
+        [...sortedByDateForReport].reverse().find((i) => i.pageFollows !== null)?.pageFollows ?? 0
+      const newFollowersReport = Math.max(0, newestFollowersReport - oldestFollowersReport)
+
       const insightsData: InsightsData = {
         platform: input.platform,
         days: endDate.getDate(),
@@ -372,7 +402,7 @@ export const aiAnalysisRouter = createTRPCRouter({
           totalReach,
           totalEngagement,
           totalFollowers: dailyInsights[0]?.pageFollows ?? 0,
-          newFollowers: dailyInsights.reduce((sum, i) => sum + (i.pageFollowsNew ?? 0), 0),
+          newFollowers: newFollowersReport,
           engagementRate: totalReach > 0 ? (totalEngagement / totalReach) * 100 : 0,
         },
         dailyData: dailyInsights.map((i) => ({
@@ -466,7 +496,20 @@ export const aiAnalysisRouter = createTRPCRouter({
       const totalReach = dailyInsights.reduce((sum, i) => sum + (i.pageReach ?? 0), 0)
       const totalEngagement = dailyInsights.reduce((sum, i) => sum + (i.pageEngagement ?? 0), 0)
       const latestFollowers = dailyInsights[0]?.pageFollows ?? 0
-      const newFollowers = dailyInsights.reduce((sum, i) => sum + (i.pageFollowsNew ?? 0), 0)
+
+      // Calculate newFollowers from daily pageFollows delta
+      const sortedByDateForRecommendations = [...dailyInsights].sort(
+        (a, b) => a.date.date.getTime() - b.date.date.getTime()
+      )
+      const oldestFollowersRecommendations =
+        sortedByDateForRecommendations.find((i) => i.pageFollows !== null)?.pageFollows ?? 0
+      const newestFollowersRecommendations =
+        [...sortedByDateForRecommendations].reverse().find((i) => i.pageFollows !== null)
+          ?.pageFollows ?? 0
+      const newFollowersRecommendations = Math.max(
+        0,
+        newestFollowersRecommendations - oldestFollowersRecommendations
+      )
 
       const insightsData: InsightsData = {
         platform: input.platform,
@@ -475,7 +518,7 @@ export const aiAnalysisRouter = createTRPCRouter({
           totalReach,
           totalEngagement,
           totalFollowers: latestFollowers,
-          newFollowers,
+          newFollowers: newFollowersRecommendations,
           engagementRate: totalReach > 0 ? (totalEngagement / totalReach) * 100 : 0,
         },
         dailyData: dailyInsights.map((i) => ({
@@ -507,5 +550,109 @@ export const aiAnalysisRouter = createTRPCRouter({
       }
 
       return getPostingRecommendations(insightsData)
+    }),
+
+  // ==========================================
+  // SAVED REPORTS ENDPOINTS
+  // ==========================================
+
+  // Save an AI report
+  saveReport: publicProcedure
+    .input(
+      z.object({
+        title: z.string().min(1).max(255),
+        reportType: z.enum(['strategic', 'report', 'recommendations']),
+        platform: z.enum(['facebook', 'instagram', 'all']),
+        focusArea: z.enum(['growth', 'engagement', 'reach']).optional(),
+        month: z.number().min(1).max(12).optional(),
+        year: z.number().min(2020).max(2030).optional(),
+        days: z.number().min(7).max(90).optional(),
+        content: z.any(), // The AI response as JSON (Prisma Json type)
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session?.user?.id ?? null
+
+      return ctx.db.savedAiReport.create({
+        data: {
+          title: input.title,
+          reportType: input.reportType,
+          platform: input.platform,
+          focusArea: input.focusArea,
+          month: input.month,
+          year: input.year,
+          days: input.days,
+          content: input.content,
+          notes: input.notes,
+          createdByUserId: userId,
+        },
+      })
+    }),
+
+  // List saved reports with pagination
+  listSavedReports: publicProcedure
+    .input(
+      z.object({
+        reportType: z.enum(['strategic', 'report', 'recommendations']).optional(),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const [reports, total] = await Promise.all([
+        ctx.db.savedAiReport.findMany({
+          where: input.reportType ? { reportType: input.reportType } : undefined,
+          orderBy: { createdAt: 'desc' },
+          take: input.limit,
+          skip: input.offset,
+          select: {
+            id: true,
+            title: true,
+            reportType: true,
+            platform: true,
+            focusArea: true,
+            month: true,
+            year: true,
+            days: true,
+            notes: true,
+            content: true, // Include for PDF export
+            createdAt: true,
+            createdBy: { select: { name: true } },
+          },
+        }),
+        ctx.db.savedAiReport.count({
+          where: input.reportType ? { reportType: input.reportType } : undefined,
+        }),
+      ])
+
+      return { reports, total }
+    }),
+
+  // Get a single saved report by ID
+  getSavedReport: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const report = await ctx.db.savedAiReport.findUnique({
+        where: { id: input.id },
+        include: { createdBy: { select: { name: true } } },
+      })
+
+      if (!report) {
+        throw new Error('Report not found')
+      }
+
+      return report
+    }),
+
+  // Delete a saved report
+  deleteSavedReport: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.savedAiReport.delete({
+        where: { id: input.id },
+      })
+
+      return { success: true }
     }),
 })

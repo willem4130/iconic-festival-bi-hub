@@ -7,13 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   ArrowLeft,
   Sparkles,
   TrendingUp,
@@ -32,8 +25,13 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useInsights, PlatformToggle } from '@/components/insights'
-
-type FocusArea = 'growth' | 'engagement' | 'reach'
+import {
+  FocusSelector,
+  ReportActions,
+  SavedReportsSheet,
+  type FocusArea,
+} from '@/components/insights/ai'
+import { useToast } from '@/hooks/use-toast'
 type ActiveTab = 'strategic' | 'report' | 'recommendations'
 
 export default function AIAnalysisPage() {
@@ -104,6 +102,49 @@ export default function AIAnalysisPage() {
     }
   )
 
+  // Save report mutation
+  const { toast } = useToast()
+  const saveReportMutation = api.aiAnalysis.saveReport.useMutation({
+    onSuccess: () => {
+      toast({
+        title: 'Report saved',
+        description: 'Your AI analysis has been saved successfully.',
+      })
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to save',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const handleSaveReport = async (params: {
+    title: string
+    notes?: string
+    reportType: 'strategic' | 'report' | 'recommendations'
+    platform: 'facebook' | 'instagram' | 'all'
+    focusArea?: FocusArea
+    month?: number
+    year?: number
+    days?: number
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    content: any
+  }) => {
+    await saveReportMutation.mutateAsync({
+      title: params.title,
+      notes: params.notes,
+      reportType: params.reportType,
+      platform: params.platform,
+      focusArea: params.focusArea,
+      month: params.month,
+      year: params.year,
+      days: params.days,
+      content: params.content as Record<string, unknown>,
+    })
+  }
+
   // Not connected state
   if (!isConnected) {
     return (
@@ -170,41 +211,27 @@ export default function AIAnalysisPage() {
 
         {/* Strategic Advice Tab */}
         <TabsContent value="strategic" className="space-y-6 mt-6">
-          {/* Focus Selector */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Focus on:</span>
-              <Select value={focusArea} onValueChange={(v) => setFocusArea(v as FocusArea)}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="growth">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-green-500" />
-                      Growth
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="engagement">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-amber-500" />
-                      Engagement
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="reach">
-                    <div className="flex items-center gap-2">
-                      <Target className="h-4 w-4 text-blue-500" />
-                      Reach
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => refetchStrategic()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
+          {/* Focus Selector - Large Cards */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                <FocusSelector
+                  value={focusArea}
+                  onChange={setFocusArea}
+                  disabled={strategicLoading}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchStrategic()}
+                  className="self-start sm:self-auto"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {strategicLoading ? (
             <LoadingState message="Generating strategic advice..." analysisType="strategic" />
@@ -553,6 +580,17 @@ export default function AIAnalysisPage() {
                     </CardContent>
                   </Card>
                 )}
+
+              {/* Save/Export Actions */}
+              <div className="flex justify-end pt-4 border-t">
+                <ReportActions
+                  reportType="strategic"
+                  platform={platform}
+                  data={strategicAdvice}
+                  focusArea={focusArea}
+                  onSave={handleSaveReport}
+                />
+              </div>
             </div>
           ) : (
             <EmptyState message="Unable to generate strategic advice. Make sure you have content synced." />
@@ -681,6 +719,18 @@ export default function AIAnalysisPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Save/Export Actions */}
+              <div className="flex justify-end pt-4 border-t">
+                <ReportActions
+                  reportType="report"
+                  platform={platform}
+                  data={narrativeReport}
+                  month={month}
+                  year={year}
+                  onSave={handleSaveReport}
+                />
+              </div>
             </div>
           ) : (
             <EmptyState message="Unable to generate report. Make sure you have data for the selected month." />
@@ -1127,6 +1177,17 @@ export default function AIAnalysisPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Save/Export Actions */}
+              <div className="flex justify-end pt-4 border-t">
+                <ReportActions
+                  reportType="recommendations"
+                  platform={platform}
+                  data={postingRecs}
+                  days={30}
+                  onSave={handleSaveReport}
+                />
+              </div>
             </div>
           ) : (
             <EmptyState message="Unable to generate recommendations. Make sure you have content synced." />
@@ -1185,7 +1246,10 @@ function Header() {
             <p className="text-muted-foreground">Claude-powered insights and recommendations</p>
           </div>
         </div>
-        <PlatformToggle />
+        <div className="flex items-center gap-3">
+          <SavedReportsSheet />
+          <PlatformToggle />
+        </div>
       </div>
     </div>
   )

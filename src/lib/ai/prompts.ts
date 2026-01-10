@@ -2,12 +2,98 @@
 
 import type { InsightsData, ContentData } from './types'
 
+/**
+ * Generate data quality notes based on the actual data availability
+ */
+function getDataQualityNotes(data: InsightsData): string {
+  const notes: string[] = []
+  const warnings: string[] = []
+
+  // Check for sparse daily data
+  const daysWithReach = data.dailyData.filter((d) => d.reach > 0).length
+  const daysWithEngagement = data.dailyData.filter((d) => d.engagement > 0).length
+  const daysWithFollowers = data.dailyData.filter((d) => d.followers > 0).length
+
+  if (daysWithReach < data.days * 0.5) {
+    notes.push(`Only ${daysWithReach}/${data.days} days have reach data recorded`)
+  }
+  if (daysWithEngagement < data.days * 0.5) {
+    notes.push(`Only ${daysWithEngagement}/${data.days} days have engagement data recorded`)
+  }
+
+  // CRITICAL: Check follower tracking data quality
+  const hasReliableFollowerGrowthData = daysWithFollowers >= 7 // Need at least a week of data
+  if (!hasReliableFollowerGrowthData) {
+    warnings.push(
+      `⚠️ FOLLOWER GROWTH DATA IS UNRELIABLE: Only ${daysWithFollowers} days have follower data. DO NOT make conclusions about follower growth, "zero growth alerts", or "weak conversion to followers" - we simply don't have enough historical data to measure this accurately.`
+    )
+  }
+
+  // Check for zero metrics
+  if (data.metrics.totalReach === 0) {
+    notes.push('No reach data available for this period')
+  }
+  if (data.metrics.totalEngagement === 0) {
+    notes.push('No engagement data available for this period')
+  }
+  if (data.metrics.totalFollowers === 0) {
+    notes.push('Follower count not available')
+  }
+  if (
+    data.metrics.newFollowers === 0 &&
+    data.metrics.totalFollowers > 0 &&
+    hasReliableFollowerGrowthData
+  ) {
+    notes.push('New followers is 0 over the measured period')
+  } else if (data.metrics.newFollowers === 0 && data.metrics.totalFollowers > 0) {
+    warnings.push(
+      '⚠️ New followers shows 0 but this is likely due to LIMITED DATA COLLECTION, not actual zero growth. DO NOT alert about "zero follower growth" or make recommendations based on this metric.'
+    )
+  }
+
+  // Check content data
+  if (data.topContent.length === 0) {
+    notes.push('No content performance data available')
+  }
+
+  // Build output with warnings first (most important)
+  const output: string[] = []
+
+  if (warnings.length > 0) {
+    output.push('⚠️ CRITICAL DATA LIMITATIONS:')
+    output.push(...warnings.map((w) => w))
+    output.push('')
+  }
+
+  if (notes.length > 0) {
+    output.push('Data notes:')
+    output.push(...notes.map((n) => `- ${n}`))
+  }
+
+  if (output.length === 0) {
+    return 'Data quality: Good - all key metrics are available for analysis.'
+  }
+
+  return output.join('\n')
+}
+
 export const SYSTEM_PROMPT = `You are an expert social media analyst for a festival/event brand.
 Analyze performance data and provide actionable insights. Be concise, specific, and data-driven.
 Always relate insights to the festival/entertainment industry context.
-Format responses as valid JSON matching the requested schema.`
+Format responses as valid JSON matching the requested schema.
+
+CRITICAL DATA QUALITY RULES - YOU MUST FOLLOW THESE:
+1. If the data includes a "⚠️ CRITICAL DATA LIMITATIONS" warning, you MUST respect it completely.
+2. NEVER generate "Zero Follower Growth Alert" or similar warnings unless you have confirmed reliable follower tracking data (7+ days).
+3. NEVER claim "weak conversion from discovery to community" or "audience retention challenge" based on follower growth if the data quality warning indicates limited follower data.
+4. "New Followers" showing 0 usually means DATA WAS NOT COLLECTED, not that there was actually zero growth.
+5. Focus your analysis on metrics that ARE reliably measured: reach, engagement, content performance.
+6. When data is sparse or unreliable, acknowledge the limitation instead of making alarming claims.
+7. It's better to say "insufficient data to assess follower growth" than to falsely alert about zero growth.`
 
 export function buildQuickInsightsPrompt(data: InsightsData): string {
+  const dataQuality = getDataQualityNotes(data)
+
   return `Analyze this social media performance data and provide 3-5 quick insights.
 
 Data for the last ${data.days} days (${data.platform}):
@@ -17,8 +103,10 @@ Data for the last ${data.days} days (${data.platform}):
 - New Followers: ${data.metrics.newFollowers.toLocaleString()}
 - Engagement Rate: ${data.metrics.engagementRate.toFixed(2)}%
 
-Top performing content types: ${data.topContent.map((c) => c.type).join(', ')}
-Average top content reach: ${Math.round(data.topContent.reduce((sum, c) => sum + c.reach, 0) / data.topContent.length).toLocaleString()}
+Top performing content types: ${data.topContent.length > 0 ? data.topContent.map((c) => c.type).join(', ') : 'No content data'}
+Average top content reach: ${data.topContent.length > 0 ? Math.round(data.topContent.reduce((sum, c) => sum + c.reach, 0) / data.topContent.length).toLocaleString() : 'N/A'}
+
+${dataQuality}
 
 Respond with JSON array of insights:
 [
@@ -101,6 +189,7 @@ export function buildStrategicAdvicePrompt(
     data.dailyData.length > 0 ? Math.round(data.metrics.totalReach / data.dailyData.length) : 0
   const avgDailyEngagement =
     data.dailyData.length > 0 ? Math.round(data.metrics.totalEngagement / data.dailyData.length) : 0
+  const dataQuality = getDataQualityNotes(data)
 
   return `Provide COMPREHENSIVE strategic advice for a festival brand's social media.
 
@@ -115,6 +204,8 @@ Current Performance (${data.days} days):
 - Total Engagement: ${data.metrics.totalEngagement.toLocaleString()}
 - Average Daily Engagement: ${avgDailyEngagement.toLocaleString()}
 - Engagement Rate: ${data.metrics.engagementRate.toFixed(2)}%
+
+${dataQuality}
 
 Top Performing Content:
 ${data.topContent.map((c, i) => `${i + 1}. ${c.type} - Reach: ${c.reach.toLocaleString()}, Engagement: ${c.engagement.toLocaleString()}${c.caption ? `\n   Caption: "${c.caption.slice(0, 80)}..."` : ''}`).join('\n')}
@@ -199,6 +290,7 @@ export function buildNarrativeReportPrompt(
   const monthName = new Date(year, month - 1).toLocaleString('en', {
     month: 'long',
   })
+  const dataQuality = getDataQualityNotes(data)
 
   return `Write a monthly social media performance report for ${monthName} ${year}.
 
@@ -213,6 +305,8 @@ Metrics:
 
 Top content reach: ${data.topContent[0]?.reach?.toLocaleString() ?? 'N/A'}
 Bottom content reach: ${data.bottomContent[0]?.reach?.toLocaleString() ?? 'N/A'}
+
+${dataQuality}
 
 Respond with JSON:
 {
@@ -233,6 +327,8 @@ Write in a professional but engaging tone for festival marketing.`
 }
 
 export function buildPostingTimePrompt(data: InsightsData): string {
+  const dataQuality = getDataQualityNotes(data)
+
   return `Analyze posting patterns and provide COMPREHENSIVE posting recommendations for a festival brand.
 
 Platform: ${data.platform}
@@ -243,6 +339,8 @@ Performance Data:
 - Total Engagement: ${data.metrics.totalEngagement.toLocaleString()}
 - Engagement Rate: ${data.metrics.engagementRate.toFixed(2)}%
 - Followers: ${data.metrics.totalFollowers.toLocaleString()}
+
+${dataQuality}
 
 Top performing content:
 ${data.topContent.map((c, i) => `${i + 1}. ${c.type} - Reach: ${c.reach.toLocaleString()}, Engagement: ${c.engagement.toLocaleString()}${c.caption ? ` - Caption preview: "${c.caption.slice(0, 50)}..."` : ''}`).join('\n')}

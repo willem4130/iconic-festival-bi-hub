@@ -42,6 +42,9 @@ model User {
   // Meta OAuth connections
   metaConnections             MetaConnection[]
 
+  // AI saved reports
+  savedAiReports              SavedAiReport[] @relation("SavedAiReportsCreatedBy")
+
   @@index([email])
   @@index([role])
 }
@@ -1804,4 +1807,37 @@ model AiAnalysisCache {
   @@unique([analysisType, inputHash])
   @@index([expiresAt])
   @@index([analysisType])
+}
+
+// saved_ai_report: User-saved AI analysis reports (permanent storage)
+model SavedAiReport {
+  id              String   @id @default(cuid())
+
+  // Report metadata
+  title           String                  // User-defined or auto-generated title
+  reportType      String                  // 'strategic' | 'report' | 'recommendations'
+
+  // Input parameters (for reference)
+  platform        String                  // 'facebook' | 'instagram' | 'all'
+  focusArea       String?                 // For strategic: 'growth' | 'engagement' | 'reach'
+  month           Int?                    // For narrative report
+  year            Int?                    // For narrative report
+  days            Int?                    // For posting recommendations
+
+  // The actual AI response (stored as JSON)
+  content         Json                    // StrategicAdvice | NarrativeReport | PostRecommendation
+
+  // User reference
+  createdByUserId String?
+  createdBy       User?    @relation("SavedAiReportsCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  // Additional metadata
+  notes           String?                 // User notes about the report
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+
+  @@index([createdByUserId])
+  @@index([reportType])
+  @@index([createdAt])
 }
